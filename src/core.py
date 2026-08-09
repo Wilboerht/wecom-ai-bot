@@ -76,7 +76,7 @@ def process_message(message) -> str | None:
         try:
             reply = chat(messages)
         except AIServiceError:
-            reply = "已为您转接人工顾问，请稍候。"
+            reply = "AI服务暂时不可用，请稍后再试。"
 
         store.session_add(user_id, "user", user_text)
         store.session_add(user_id, "assistant", reply)
@@ -220,13 +220,13 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
 
 def _handle_kf_transfer(open_kfid: str, external_userid: str, service_userid: str) -> None:
-    """标记转人工 + 发提示 + 调转移 API"""
+    """标记转人工 + 调转移 API + 发提示"""
     store.transfer_mark(open_kfid, external_userid)
-    _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
+    transferred = False
     if service_userid:
         try:
             from .wecom.wxkf import transfer_session
-            transfer_session(
+            transferred = transfer_session(
                 corpid=config.WECOM_CORP_ID,
                 secret=config.WECOM_SECRET,
                 open_kfid=open_kfid,
@@ -235,22 +235,13 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, service_userid: st
             )
         except Exception as e:
             logger.error(f"转接失败: {e}")
+    msg = "已为您转接人工顾问，请稍候。" if transferred else "正在为您转接，请稍候..."
+    _do_send_kf(open_kfid, external_userid, msg)
 
 
 def _handle_kf_non_text(open_kfid: str, external_userid: str, service_userid: str) -> None:
     """非文本消息 → 自动转人工"""
-    store.transfer_mark(open_kfid, external_userid)
-    _do_send_kf(open_kfid, external_userid, "已为您转接人工顾问，请稍候。")
-    if service_userid:
-        try:
-            from .wecom.wxkf import transfer_session
-            transfer_session(
-                corpid=config.WECOM_CORP_ID, secret=config.WECOM_SECRET,
-                open_kfid=open_kfid, external_userid=external_userid,
-                service_userid=service_userid,
-            )
-        except Exception:
-            pass
+    _handle_kf_transfer(open_kfid, external_userid, service_userid)
 
 
 def _do_send_kf(open_kfid: str, to_user: str, content: str, msgid: str = "") -> None:

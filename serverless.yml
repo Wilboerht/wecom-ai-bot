@@ -33,6 +33,10 @@ inputs:
       SYSTEM_PROMPT: ${env:SYSTEM_PROMPT}
       SESSION_TTL: ${env:SESSION_TTL}
       LOG_LEVEL: ${env:LOG_LEVEL}
+      WX_APP_ID: ${env:WX_APP_ID}
+      WX_TOKEN: ${env:WX_TOKEN}
+      WX_ENCODING_AES_KEY: ${env:WX_ENCODING_AES_KEY}
+      REDIS_URL: ${env:REDIS_URL}
   triggers:
     - type: apigw
       parameters:

@@ -14,7 +14,7 @@ module.exports = {
         autorestart: true,
         max_restarts: 10,
         min_uptime: '10s',
-        max_memory_restart: '300M',
+        max_memory_restart: '512M',
         kill_timeout: 5000,
         listen_timeout: 10000,
         env_file: './.env',

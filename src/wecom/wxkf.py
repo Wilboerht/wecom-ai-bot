@@ -16,28 +16,31 @@ SEND_MSG_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/send_msg"
 TRANSFER_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/service_state/trans"
 
 _access_token: dict = {"value": "", "expires_at": 0}
+import threading
+_token_lock = threading.Lock()
 
 
 def get_access_token(corpid: str, secret: str) -> str:
-    """获取并缓存 access_token (有效期7200秒, 提前5分钟刷新)"""
-    now = time.time()
-    if _access_token["value"] and _access_token["expires_at"] > now + 300:
+    """获取并缓存 access_token (线程安全)"""
+    with _token_lock:
+        now = time.time()
+        if _access_token["value"] and _access_token["expires_at"] > now + 300:
+            return _access_token["value"]
+
+        with Client(timeout=10) as client:
+            resp = client.get(
+                TOKEN_URL,
+                params={"corpid": corpid, "corpsecret": secret},
+            )
+            data = resp.json()
+
+        if data.get("errcode", 0) != 0:
+            raise RuntimeError(f"获取access_token失败: {data}")
+
+        _access_token["value"] = data["access_token"]
+        _access_token["expires_at"] = now + data.get("expires_in", 7200)
+        logger.info("access_token 已刷新")
         return _access_token["value"]
-
-    with Client(timeout=10) as client:
-        resp = client.get(
-            TOKEN_URL,
-            params={"corpid": corpid, "corpsecret": secret},
-        )
-        data = resp.json()
-
-    if data.get("errcode", 0) != 0:
-        raise RuntimeError(f"获取access_token失败: {data}")
-
-    _access_token["value"] = data["access_token"]
-    _access_token["expires_at"] = now + data.get("expires_in", 7200)
-    logger.info("access_token 已刷新, 过期时间: %.0f秒后", data.get("expires_in", 7200))
-    return _access_token["value"]
 
 
 def sync_messages(
@@ -69,15 +72,12 @@ def sync_messages(
     }
 
     with Client(timeout=10) as client:
-        resp = client.post(
-            f"{SYNC_MSG_URL}?access_token={access_token}",
-            json=payload,
-        )
+        resp = client.post(SYNC_MSG_URL, params={"access_token": access_token}, json=payload)
         data = resp.json()
 
     if data.get("errcode", 0) != 0:
         logger.error(f"sync_msg 失败: {data}")
-        return {"msg_list": [], "next_cursor": "", "has_more": 0, "_error": data}
+        return {"msg_list": [], "next_cursor": "", "has_more": 0}
 
     return data
 
@@ -118,18 +118,15 @@ def send_message(
         payload["msgid"] = msgid
 
     with Client(timeout=10) as client:
-        resp = client.post(
-            f"{SEND_MSG_URL}?access_token={access_token}",
-            json=payload,
-        )
+        resp = client.post(SEND_MSG_URL, params={"access_token": access_token}, json=payload)
         data = resp.json()
 
     if data.get("errcode", 0) != 0:
         logger.error(f"send_msg 失败: {data}")
-        return {"ok": False, "_error": data}
+        return False
 
     logger.info("send_msg 成功: to=%s", to_user)
-    return {"ok": True}
+    return True
 
 
 def transfer_session(
@@ -159,10 +156,7 @@ def transfer_session(
     }
 
     with Client(timeout=10) as client:
-        resp = client.post(
-            f"{TRANSFER_URL}?access_token={access_token}",
-            json=payload,
-        )
+        resp = client.post(TRANSFER_URL, params={"access_token": access_token}, json=payload)
         data = resp.json()
 
     if data.get("errcode", 0) != 0:

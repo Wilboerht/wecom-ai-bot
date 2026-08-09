@@ -10,15 +10,13 @@ import re
 
 logger = logging.getLogger(__name__)
 
-_knowledge_cache: str = ""
+_knowledge_cache: dict[str, str] = {}
 
 
 def load_knowledge(filepath: str = "knowledge.txt") -> str:
-    """读取知识库文件, 返回格式化的知识文本"""
-    global _knowledge_cache
-
-    if _knowledge_cache:
-        return _knowledge_cache
+    """读取知识库文件, 返回格式化的知识文本, 按文件名缓存"""
+    if filepath in _knowledge_cache:
+        return _knowledge_cache[filepath]
 
     if not os.path.exists(filepath):
         logger.warning("知识库文件未找到: %s, 使用空知识库", filepath)
@@ -67,6 +65,6 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
         lines.append(f"   答: {a}")
 
     text = "\n".join(lines)
-    _knowledge_cache = text
-    logger.info("知识库加载完成: %d 条", len(entries))
+    _knowledge_cache[filepath] = text
+    logger.info("知识库加载完成 [%s]: %d 条", filepath, len(entries))
     return text
