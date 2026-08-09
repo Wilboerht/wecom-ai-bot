@@ -10,7 +10,7 @@
     "knowledge_file": "knowledge.txt",
     "service_userid": "WangHongKun"
   },
-  "请替换为你的护肤顾问OpenKfId": {
+  "kfc7834894b7ee2b86a": {
     "name": "护肤顾问",
     "system_prompt": "你是NIHPLOD旎柏的专业护肤顾问。你精通皮肤科学、成分分析和护肤方案设计。根据用户的肤质、需求和问题，提供个性化的护肤建议。语气专业、温和、有科学依据，不推荐竞品。每次回复不超过3句话。",
     "knowledge_file": "knowledge_skincare.txt",
