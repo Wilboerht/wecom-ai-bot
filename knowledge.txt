@@ -51,8 +51,26 @@ Q: 客服联系方式？
 A: 您可以直接在此对话咨询，也可以拨打客服热线 400-XXX-XXXX（工作日9:00-18:00）。
 
 # ============================================================
-# NIHPLOD 产品线 — 产品名称及购买链接
+# NIHPLOD 产品线 — 所有推荐只能来自此清单
 # ============================================================
 
-Q: NIHPLOD有哪些产品？
-A: 洁面：氨基酸温和洁面乳 https://nihplod.cn/products/cleanser-mild 丨 水杨酸控油洁面 https://nihplod.cn/products/cleanser-salicylic。精华：VC亮肤精华 https://nihplod.cn/products/vc-serum 丨 透明质酸保湿精华 https://nihplod.cn/products/ha-serum 丨 视黄醇抗老精华 https://nihplod.cn/products/retinol-serum 丨 烟酰胺控油精华 https://nihplod.cn/products/niacinamide-serum。面霜：积雪草修护面霜 https://nihplod.cn/products/cica-cream 丨 清透水凝霜 https://nihplod.cn/products/gel-cream 丨 角鲨烷滋养霜 https://nihplod.cn/products/squalane-cream。面膜：玻尿酸水光面膜 https://nihplod.cn/products/ha-mask 丨 绿茶清洁泥膜 https://nihplod.cn/products/clay-mask。防晒：清透物理防晒乳 https://nihplod.cn/products/mineral-sunscreen 丨 水感化学防晒霜 https://nihplod.cn/products/chemical-sunscreen。
+Q: NIHPLOD有哪些洁面/清洁产品？
+A: 净透温和洁面慕斯（云朵洁面）￥680/100ml：氨基酸温和清洁，含烟酰胺+泛醇+透明质酸钠，全肤质适用。购买：https://nihplod.cn/products/cloud-cleanser 丨 均衡磨砂膏（黑曜磨砂）￥780/50ml：含核桃壳粉+壬二酸+迷迭香油，温和去角质提亮，每周1-2次。购买：https://nihplod.cn/products/obsidian-scrub
+
+Q: NIHPLOD有哪些精华产品？
+A: 时光涅槃臻萃精华露（童颜精华）￥4,500/30ml：含烟酰胺+羟丙基四氢吡喃三醇（玻色因）+双歧杆菌发酵物+富勒烯+寡肽-1，多效抗老，改善细纹/色素/松弛。购买：https://nihplod.cn/products/time-essence
+
+Q: NIHPLOD有哪些面霜？
+A: 恒采修护面霜（白魔法）￥2,800/50ml：含羟丙基四氢吡喃三醇（玻色因）+神经酰胺NP+透明质酸钠+牛油果树果脂+燕麦仁油，淡化细纹、修复屏障。购买：https://nihplod.cn/products/white-magic-cream
+
+Q: NIHPLOD有哪些面膜？
+A: 致奢赋活莱塞尔面膜（守护面膜）￥1,350/30g×4：含α-熊果苷+烟酰胺+泛醇+透明质酸钠+乙酰基六肽-8，修护提亮维稳淡化细纹。购买：https://nihplod.cn/products/guardian-mask
+
+Q: NIHPLOD有哪些防晒产品？
+A: 轻透长护防晒霜（蛋定防晒）￥880/40ml：含燕麦仁油+双歧杆菌发酵物+神经酰胺NP+维生素E，修护隔离紫外线、提亮肤色。购买：https://nihplod.cn/products/egg-sunscreen
+
+Q: NIHPLOD有哪些身体护理产品？
+A: 新生焕活身体乳（聚宝瓶）￥1,000/250ml：含牛油果树果脂+烟酰胺+羟丙基四氢吡喃三醇（玻色因）+透明质酸钠+光甘草定，保湿修护淡化细纹。购买：https://nihplod.cn/products/treasure-body-lotion 丨 抚纹紧致护手霜（随身笔）￥480/25ml：含角鲨烷+羟丙基四氢吡喃三醇（玻色因）+依克多因+可溶性胶原，淡化细纹保湿修护。购买：https://nihplod.cn/products/pen-hand-cream
+
+Q: NIHPLOD有哪些美容油？
+A: 臻萃呵护美容油（绿魔法）￥1,350/30ml：含向日葵籽油+霍霍巴籽油+月见草油+檀香油+乳香油，深层修护强韧屏障滋养抗老，可混合面霜使用。购买：https://nihplod.cn/products/green-magic-oil

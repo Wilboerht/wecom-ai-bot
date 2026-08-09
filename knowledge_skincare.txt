@@ -54,17 +54,23 @@ A: 血管型用含咖啡因、维K的眼霜；色素型用含VC、烟酰胺的�
 # NIHPLOD 产品线 — 所有推荐只能来自此清单
 # ============================================================
 
-Q: NIHPLOD有哪些洁面产品？
-A: 氨基酸温和洁面乳（适合所有肤质，含氨基酸表活，温和清洁）购买：https://nihplod.cn/products/cleanser-mild丨水杨酸控油洁面（适合油性/痘痘肌，含水杨酸，控油去角质）购买：https://nihplod.cn/products/cleanser-salicylic
+Q: NIHPLOD有哪些洁面/清洁产品？
+A: 净透温和洁面慕斯（云朵洁面）￥680/100ml：氨基酸温和清洁，含烟酰胺+泛醇+透明质酸钠，全肤质。购买：https://nihplod.cn/products/cloud-cleanser 丨 均衡磨砂膏（黑曜磨砂）￥780/50ml：含核桃壳粉+壬二酸+迷迭香油，温和去角质提亮，每周1-2次。购买：https://nihplod.cn/products/obsidian-scrub
 
 Q: NIHPLOD有哪些精华产品？
-A: VC亮肤精华10%（提亮肤色、抗氧化，早间使用）购买：https://nihplod.cn/products/vc-serum丨透明质酸保湿精华（深层补水，含大中小分子透明质酸，所有肤质适用）购买：https://nihplod.cn/products/ha-serum丨视黄醇抗老精华0.3%（改善细纹、紧致肌肤，仅夜间使用，需建立耐受）购买：https://nihplod.cn/products/retinol-serum丨烟酰胺控油精华5%（控油、收缩毛孔、修护屏障）购买：https://nihplod.cn/products/niacinamide-serum
+A: 时光涅槃臻萃精华露（童颜精华）￥4,500/30ml：含烟酰胺+羟丙基四氢吡喃三醇（玻色因）+双歧杆菌发酵物+富勒烯+寡肽-1，多效抗老，改善细纹/色素/松弛。购买：https://nihplod.cn/products/time-essence
 
-Q: NIHPLOD有哪些面霜/乳液？
-A: 积雪草修护面霜（含积雪草提取物，修护屏障，适合敏感肌和干性肌）购买：https://nihplod.cn/products/cica-cream丨清透水凝霜（啫喱质地，清爽不油腻，适合油性和混合性肌肤）购买：https://nihplod.cn/products/gel-cream丨角鲨烷滋养霜（含角鲨烷和神经酰胺，深度滋养，适合干性肌肤）购买：https://nihplod.cn/products/squalane-cream
+Q: NIHPLOD有哪些面霜？
+A: 恒采修护面霜（白魔法）￥2,800/50ml：含羟丙基四氢吡喃三醇（玻色因）+神经酰胺NP+透明质酸钠+牛油果树果脂+燕麦仁油，淡化细纹、修复屏障。购买：https://nihplod.cn/products/white-magic-cream
 
-Q: NIHPLOD有哪些面膜产品？
-A: 玻尿酸水光面膜（密集补水，含透明质酸和泛醇）购买：https://nihplod.cn/products/ha-mask丨绿茶清洁泥膜（深层清洁，含绿茶提取物和高岭土，适合油性肌）购买：https://nihplod.cn/products/clay-mask
+Q: NIHPLOD有哪些面膜？
+A: 致奢赋活莱塞尔面膜（守护面膜）￥1,350/30g×4：含α-熊果苷+烟酰胺+泛醇+透明质酸钠+乙酰基六肽-8，修护提亮维稳淡化细纹。购买：https://nihplod.cn/products/guardian-mask
 
 Q: NIHPLOD有哪些防晒产品？
-A: 清透物理防晒乳SPF50+（纯物理防晒，氧化锌+二氧化钛，适合敏感肌）购买：https://nihplod.cn/products/mineral-sunscreen丨水感化学防晒霜SPF50+（轻薄水感质地，日常通勤）购买：https://nihplod.cn/products/chemical-sunscreen
+A: 轻透长护防晒霜（蛋定防晒）￥880/40ml：含燕麦仁油+双歧杆菌发酵物+神经酰胺NP+维生素E，修护隔离紫外线、提亮肤色。购买：https://nihplod.cn/products/egg-sunscreen
+
+Q: NIHPLOD有哪些身体护理产品？
+A: 新生焕活身体乳（聚宝瓶）￥1,000/250ml：含牛油果树果脂+烟酰胺+玻色因+透明质酸钠+光甘草定，保湿修护淡化细纹。购买：https://nihplod.cn/products/treasure-body-lotion 丨 抚纹紧致护手霜（随身笔）￥480/25ml：含角鲨烷+玻色因+依克多因+可溶性胶原，淡化细纹保湿修护。购买：https://nihplod.cn/products/pen-hand-cream
+
+Q: NIHPLOD有哪些美容油？
+A: 臻萃呵护美容油（绿魔法）￥1,350/30ml：含向日葵籽油+霍霍巴籽油+月见草油+檀香油+乳香油，深层修护滋养抗老，可混合面霜使用。购买：https://nihplod.cn/products/green-magic-oil
