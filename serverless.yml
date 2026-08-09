@@ -10,6 +10,7 @@ inputs:
       - .git
       - .gitignore
       - tests
+      - dist
       - __pycache__
       - .pytest_cache
       - .venv
@@ -18,7 +19,7 @@ inputs:
       - htmlcov
   region: ap-guangzhou
   runtime: Python3.10
-  handler: main.main_handler
+  handler: dist.main.main_handler
   memorySize: 512
   timeout: 30
   environment:
@@ -45,6 +46,8 @@ inputs:
           - https
         endpoints:
           - path: /callback
+            method: ANY
+          - path: /wx-callback
             method: ANY
           - path: /health
             method: GET

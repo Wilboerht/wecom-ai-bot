@@ -187,7 +187,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
             # 转人工
             transfer_keywords = ["转人工", "人工客服", "人工服务", "找人工"]
-            if any(kw in user_text for kw in transfer_keywords if len(kw) >= 3) and not store.transfer_is_active(open_kfid, external_userid):
+            if any(kw in user_text for kw in transfer_keywords) and not store.transfer_is_active(open_kfid, external_userid):
                 _handle_kf_transfer(open_kfid, external_userid, service_userid)
                 continue
 
@@ -247,7 +247,7 @@ def _handle_kf_non_text(open_kfid: str, external_userid: str, service_userid: st
 
 def _do_send_kf(open_kfid: str, to_user: str, content: str, msgid: str = "") -> None:
     from .wecom.wxkf import send_message
-    send_message(
+    ok = send_message(
         corpid=config.WECOM_CORP_ID,
         secret=config.WECOM_SECRET,
         to_user=to_user,
@@ -256,3 +256,5 @@ def _do_send_kf(open_kfid: str, to_user: str, content: str, msgid: str = "") -> 
         content=content,
         msgid=msgid,
     )
+    if not ok:
+        logger.error("send_msg 失败: open_kfid=%s to=%s", open_kfid, to_user)

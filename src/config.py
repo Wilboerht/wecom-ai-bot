@@ -12,7 +12,7 @@ class ConfigError(Exception):
 class Config:
     def __init__(self):
         self.WECOM_CORP_ID = self._require("WECOM_CORP_ID")
-        self.WECOM_AGENT_ID = self._require("WECOM_AGENT_ID")
+        self.WECOM_AGENT_ID = os.getenv("WECOM_AGENT_ID", "")
         self.WECOM_SECRET = self._require("WECOM_SECRET")
         self.WECOM_TOKEN = self._require("WECOM_TOKEN")
         self.WECOM_ENCODING_AES_KEY = self._require("WECOM_ENCODING_AES_KEY")
@@ -25,7 +25,7 @@ class Config:
         self.WX_ENCODING_AES_KEY = os.getenv("WX_ENCODING_AES_KEY", "")
 
         if self.WX_APP_ID:
-            self._validate_token(self.WX_TOKEN)
+            self._validate_token(self.WX_TOKEN, "WX_TOKEN")
             self._validate_aes_key(self.WX_ENCODING_AES_KEY)
 
         self.WECOM_SERVICE_USERID = os.getenv("WECOM_SERVICE_USERID", "")
@@ -38,12 +38,18 @@ class Config:
             "你是一个专业的智能客服助手，请用简洁、友好的语言回答用户的问题。",
         )
 
-        self.SESSION_TTL = int(os.getenv("SESSION_TTL", "1800"))
+        self.SESSION_TTL = self._require_int("SESSION_TTL", 1800)
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
         self.REDIS_URL = os.getenv("REDIS_URL", "")
 
         self._accounts = {}
         self._load_accounts()
+
+    def _require_int(self, key: str, default: int) -> int:
+        try:
+            return int(os.getenv(key, str(default)))
+        except ValueError:
+            raise ConfigError(f"环境变量 {key} 值无效，需为数字: {os.getenv(key)}") from None
 
     def _load_accounts(self) -> None:
         path = os.getenv("KF_ACCOUNTS_FILE", "kf_accounts.json")
@@ -66,11 +72,9 @@ class Config:
             )
         return value
 
-    def _validate_token(self, token: str) -> None:
+    def _validate_token(self, token: str, name: str = "TOKEN") -> None:
         if not (3 <= len(token) <= 32):
-            raise ConfigError(
-                f"WECOM_TOKEN 长度必须为 3-32 位，当前长度: {len(token)}"
-            )
+            raise ConfigError(f"{name} 长度必须为 3-32 位，当前: {len(token)}")
 
     def _validate_aes_key(self, key: str) -> None:
         if len(key) != 43:

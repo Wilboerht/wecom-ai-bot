@@ -20,7 +20,6 @@ TRANSFER_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/service_state/trans"
 _client = Client(timeout=10, limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
 _access_token: dict = {"value": "", "expires_at": 0}
-import threading
 _token_lock = threading.Lock()
 
 

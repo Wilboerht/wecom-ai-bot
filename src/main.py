@@ -4,7 +4,6 @@ NIHPLOD 旎柏 AI 智能客服 — FastAPI 服务入口
 启动: uvicorn src.main:app --host 0.0.0.0 --port 8080
 """
 import logging
-import threading
 import traceback
 from fastapi import FastAPI, Request, Query, BackgroundTasks
 from fastapi.responses import PlainTextResponse, Response
