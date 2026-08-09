@@ -224,7 +224,7 @@ def _process_message(message) -> str | None:
         session_manager.add_message(user_id, "assistant", reply)
         return reply
 
-    return None
+    return "暂不支持图片/语音，请用文字描述您的问题。"
 
 
 def _process_kf_messages(token: str, open_kfid: str) -> None:
@@ -309,10 +309,24 @@ def _process_kf_messages(token: str, open_kfid: str) -> None:
             messages.extend(history)
             messages.append({"role": "user", "content": user_text[:2000]})
 
-        try:
-            reply = chat(messages)
-        except AIServiceError:
-            reply = "已为您转接人工顾问，请稍候。"
+            try:
+                reply = chat(messages)
+            except AIServiceError:
+                _transferred.add(external_userid)
+                reply = "已为您转接人工顾问，请稍候。"
+                if service_userid:
+                    try:
+                        from .wecom.wxkf import transfer_session
+                        transfer_session(
+                            corpid=config.WECOM_CORP_ID,
+                            secret=config.WECOM_SECRET,
+                            open_kfid=open_kfid,
+                            external_userid=external_userid,
+                            service_userid=service_userid,
+                        )
+                    except Exception:
+                        pass
+
             session_manager.add_message(external_userid, "user", user_text)
             session_manager.add_message(external_userid, "assistant", reply)
             _do_send_kf(open_kfid, external_userid, reply, msg_id)
