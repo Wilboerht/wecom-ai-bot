@@ -182,9 +182,14 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             if store.msgid_is_duplicate(msg_id, open_kfid):
                 continue
 
+            # 更新用户活跃时间 + 检查转人工是否过期
+            store.transfer_touch(open_kfid, external_userid)
+            if send_time > 0:
+                store.transfer_check_expire(open_kfid, external_userid, send_time)
+
             # 转人工
             transfer_keywords = ["转人工", "人工客服", "人工服务", "找人工"]
-            if any(kw in user_text for kw in transfer_keywords) and not store.transfer_is_active(open_kfid, external_userid, send_time):
+            if any(kw in user_text for kw in transfer_keywords) and not store.transfer_is_active(open_kfid, external_userid):
                 _handle_kf_transfer(open_kfid, external_userid, candidates)
                 continue
 
@@ -192,7 +197,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             if "智能回复" in user_text and store.transfer_is_active(open_kfid, external_userid):
                 store.transfer_reset(open_kfid, external_userid)
 
-            if store.transfer_is_active(open_kfid, external_userid, send_time):
+            if store.transfer_is_active(open_kfid, external_userid):
                 continue
 
             # AI 回复
