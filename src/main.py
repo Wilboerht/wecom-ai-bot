@@ -219,7 +219,7 @@ def _process_message(message) -> str | None:
         try:
             reply = chat(messages)
         except AIServiceError:
-            reply = "AI服务暂时不可用，正在为您转接人工客服，请稍候。"
+            reply = "已为您转接人工顾问，请稍候。"
         session_manager.add_message(user_id, "user", user_text)
         session_manager.add_message(user_id, "assistant", reply)
         return reply
@@ -312,7 +312,7 @@ def _process_kf_messages(token: str, open_kfid: str) -> None:
         try:
             reply = chat(messages)
         except AIServiceError:
-            reply = "AI服务暂时不可用，正在为您转接人工客服，请稍候。"
+            reply = "已为您转接人工顾问，请稍候。"
             session_manager.add_message(external_userid, "user", user_text)
             session_manager.add_message(external_userid, "assistant", reply)
             _do_send_kf(open_kfid, external_userid, reply, msg_id)
