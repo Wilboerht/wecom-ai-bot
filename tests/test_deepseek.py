@@ -28,39 +28,39 @@ class TestDeepSeekChat:
 
     def test_chat_http_401(self):
         from httpx import HTTPStatusError, Response
-        from src.ai.deepseek import chat
+        from src.ai.deepseek import chat, AIServiceError
 
         with patch("src.ai.deepseek.Client") as mock_client:
             mock_resp = Response(status_code=401)
             error = HTTPStatusError("Unauthorized", request=None, response=mock_resp)  # type: ignore[arg-type]
             mock_client.return_value.__enter__.return_value.post.side_effect = error
 
-            reply = chat([{"role": "user", "content": "test"}])
-            assert "配置错误" in reply
+            with pytest.raises(AIServiceError):
+                chat([{"role": "user", "content": "test"}])
 
     def test_chat_http_429(self):
         from httpx import HTTPStatusError, Response
-        from src.ai.deepseek import chat
+        from src.ai.deepseek import chat, AIServiceError
 
         with patch("src.ai.deepseek.Client") as mock_client:
             mock_resp = Response(status_code=429)
             error = HTTPStatusError("Rate limited", request=None, response=mock_resp)  # type: ignore[arg-type]
             mock_client.return_value.__enter__.return_value.post.side_effect = error
 
-            reply = chat([{"role": "user", "content": "test"}])
-            assert "稍后再试" in reply
+            with pytest.raises(AIServiceError):
+                chat([{"role": "user", "content": "test"}])
 
     def test_chat_timeout(self):
         from httpx import TimeoutException
-        from src.ai.deepseek import chat
+        from src.ai.deepseek import chat, AIServiceError
 
         with patch("src.ai.deepseek.Client") as mock_client:
             mock_client.return_value.__enter__.return_value.post.side_effect = (
                 TimeoutException("timeout")
             )
 
-            reply = chat([{"role": "user", "content": "test"}])
-            assert "思考中" in reply or "稍后" in reply
+            with pytest.raises(AIServiceError):
+                chat([{"role": "user", "content": "test"}])
 
 
 class TestSessionManager:

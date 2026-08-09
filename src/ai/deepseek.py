@@ -7,15 +7,16 @@ logger = logging.getLogger(__name__)
 DEEPSEEK_API_URL = "https://api.deepseek.com/v1/chat/completions"
 
 
+class AIServiceError(Exception):
+    """AI 服务不可用"""
+    pass
+
+
 def chat(messages: list[dict], timeout: float = 28.0) -> str:
     """调用 DeepSeek API 进行对话
 
-    Args:
-        messages: OpenAI 格式的消息列表
-        timeout: 请求超时秒数
-
-    Returns:
-        AI 回复文本
+    Raises:
+        AIServiceError: AI 服务不可用时抛出，调用方应转人工处理
     """
     headers = {
         "Authorization": f"Bearer {config.DEEPSEEK_API_KEY}",
@@ -39,20 +40,12 @@ def chat(messages: list[dict], timeout: float = 28.0) -> str:
     except HTTPStatusError as e:
         status = e.response.status_code
         logger.error(f"DeepSeek API HTTP {status}")
+        raise AIServiceError(f"HTTP {status}") from e
 
-        if status == 401:
-            return "服务配置错误，请联系管理员。"
-        if status == 429:
-            return "当前咨询人数较多，请稍后再试。"
-        if status == 402:
-            return "服务暂时不可用（账户余额不足），请联系管理员。"
-
-        return "抱歉，AI服务暂时不可用，请稍后再试。"
-
-    except TimeoutException:
+    except TimeoutException as e:
         logger.error("DeepSeek API 请求超时")
-        return "AI正在思考中，请稍后再发消息试试。"
+        raise AIServiceError(f"timeout") from e
 
     except Exception as e:
         logger.error(f"DeepSeek API 调用异常: {e}")
-        return "抱歉，AI服务暂时不可用，请稍后再试。"
+        raise AIServiceError(str(e)) from e

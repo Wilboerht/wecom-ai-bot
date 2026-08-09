@@ -19,7 +19,7 @@ from .wecom.handler import (
     build_encrypted_reply_xml,
 )
 from .wecom.types import TextMessage, EventMessage
-from .ai.deepseek import chat
+from .ai.deepseek import chat, AIServiceError
 from .ai.session import session_manager
 from .ai.knowledge import load_knowledge
 
@@ -216,7 +216,10 @@ def _process_message(message) -> str | None:
         messages.extend(history)
         messages.append({"role": "user", "content": user_text})
 
-        reply = chat(messages)
+        try:
+            reply = chat(messages)
+        except AIServiceError:
+            reply = "AI服务暂时不可用，正在为您转接人工客服，请稍候。"
         session_manager.add_message(user_id, "user", user_text)
         session_manager.add_message(user_id, "assistant", reply)
         return reply
@@ -306,7 +309,10 @@ def _process_kf_messages(token: str, open_kfid: str) -> None:
             messages.extend(history)
             messages.append({"role": "user", "content": user_text[:2000]})
 
+        try:
             reply = chat(messages)
+        except AIServiceError:
+            reply = "AI服务暂时不可用，正在为您转接人工客服，请稍候。"
             session_manager.add_message(external_userid, "user", user_text)
             session_manager.add_message(external_userid, "assistant", reply)
             _do_send_kf(open_kfid, external_userid, reply, msg_id)
