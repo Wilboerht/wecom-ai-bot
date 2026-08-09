@@ -1,0 +1,15 @@
+[Unit]
+Description=NIHPLOD AI 智能客服
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/wecom-ai-bot
+ExecStart=/usr/bin/python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/wecom-ai-bot/.env
+
+[Install]
+WantedBy=multi-user.target
