@@ -1,4 +1,5 @@
 import os
+import json
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -39,6 +40,22 @@ class Config:
 
         self.SESSION_TTL = int(os.getenv("SESSION_TTL", "1800"))
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+
+        self._accounts = {}
+        self._load_accounts()
+
+    def _load_accounts(self) -> None:
+        path = os.getenv("KF_ACCOUNTS_FILE", "kf_accounts.json")
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                self._accounts = json.load(f)
+
+    def get_account(self, open_kfid: str) -> dict:
+        """获取客服账号配置，未匹配时返回 _default"""
+        return self._accounts.get(
+            open_kfid,
+            self._accounts.get("_default", {}),
+        )
 
     def _require(self, key: str) -> str:
         value = os.getenv(key)

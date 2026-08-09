@@ -45,19 +45,29 @@ if config.WX_APP_ID:
     )
 
 _system_prompt = ""
+_account_prompts: dict[str, str] = {}
 _processed_msgids: set = set()
 _transferred: set = set()
 _rate_limit: dict[str, list[float]] = {}
 
 
-def _get_system_prompt() -> str:
-    global _system_prompt
-    if not _system_prompt:
-        knowledge = load_knowledge("knowledge.txt")
-        _system_prompt = config.SYSTEM_PROMPT
-        if knowledge:
-            _system_prompt += "\n\n" + knowledge
-    return _system_prompt
+def _get_system_prompt(open_kfid: str = "") -> str:
+    """获取指定客服账号的系统提示词（含知识库）"""
+    account = config.get_account(open_kfid)
+    prompt = account.get("system_prompt", "") or config.SYSTEM_PROMPT
+    knowledge_file = account.get("knowledge_file", "knowledge.txt")
+
+    cache_key = f"{open_kfid}:{knowledge_file}"
+    if cache_key in _account_prompts:
+        return _account_prompts[cache_key]
+
+    knowledge = load_knowledge(knowledge_file) if knowledge_file else ""
+    full = prompt
+    if knowledge:
+        full += "\n\n" + knowledge
+
+    _account_prompts[cache_key] = full
+    return full
 
 
 def _check_rate_limit(user_id: str, send_time: int = 0) -> bool:
@@ -219,6 +229,9 @@ def _process_kf_messages(token: str, open_kfid: str) -> None:
 
     global _processed_msgids, _transferred
 
+    account = config.get_account(open_kfid)
+    service_userid = account.get("service_userid", "") or config.WECOM_SERVICE_USERID
+
     cursor = ""
     for _ in range(5):
         data = sync_messages(
@@ -261,7 +274,7 @@ def _process_kf_messages(token: str, open_kfid: str) -> None:
             if any(kw in user_text for kw in transfer_keywords if len(kw) >= 3) and external_userid not in _transferred:
                 _transferred.add(external_userid)
                 _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
-                if config.WECOM_SERVICE_USERID:
+                if service_userid:
                     try:
                         from .wecom.wxkf import transfer_session
                         transfer_session(
@@ -269,7 +282,7 @@ def _process_kf_messages(token: str, open_kfid: str) -> None:
                             secret=config.WECOM_SECRET,
                             open_kfid=open_kfid,
                             external_userid=external_userid,
-                            service_userid=config.WECOM_SERVICE_USERID,
+                            service_userid=service_userid,
                         )
                     except Exception as e:
                         logger.error(f"转接失败: {e}")
@@ -284,7 +297,7 @@ def _process_kf_messages(token: str, open_kfid: str) -> None:
 
             # AI 回复
             history = session_manager.get_context(external_userid)
-            messages = [{"role": "system", "content": _get_system_prompt()}]
+            messages = [{"role": "system", "content": _get_system_prompt(open_kfid)}]
             messages.extend(history)
             messages.append({"role": "user", "content": user_text[:2000]})
 
