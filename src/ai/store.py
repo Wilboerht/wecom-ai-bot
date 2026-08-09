@@ -198,6 +198,54 @@ def transfer_next_index(open_kfid: str, total: int) -> int:
     return random.randrange(total)
 
 
+# ---- 接待工作量均衡（最少接待优先） ----
+_LOAD_PREFIX = "load:"
+
+
+def transfer_pick_agent(open_kfid: str, candidates: list, preferred: str = "") -> str:
+    """选择转接目标：优先熟人 > 最少接待量均衡"""
+    if not candidates:
+        return ""
+    if len(candidates) == 1:
+        return candidates[0]
+
+    # 优先上次服务过的同事
+    if preferred and preferred in candidates:
+        return preferred
+
+    # 均衡：选当前接待量最少的
+    r = _get_redis()
+    if r:
+        best = candidates[0]
+        best_load = _get_agent_load(r, open_kfid, best)
+        for agent in candidates[1:]:
+            load = _get_agent_load(r, open_kfid, agent)
+            if load < best_load:
+                best_load = load
+                best = agent
+        r.incr(f"{_LOAD_PREFIX}{open_kfid}:{best}")
+        return best
+
+    # 内存回退：简单轮转
+    idx = transfer_next_index(open_kfid, len(candidates))
+    return candidates[idx]
+
+
+def _get_agent_load(r, open_kfid: str, agent: str) -> int:
+    """获取某接待人员的当前接待量"""
+    try:
+        return int(r.get(f"{_LOAD_PREFIX}{open_kfid}:{agent}") or 0)
+    except Exception:
+        return 0
+
+
+def transfer_complete(open_kfid: str, agent: str) -> None:
+    """接待完成，减少该接待人员的负载计数"""
+    r = _get_redis()
+    if r:
+        r.decr(f"{_LOAD_PREFIX}{open_kfid}:{agent}")
+
+
 # ---- 用户→接待人绑定（优先上次服务过的同事） ----
 _AGENT_PREFIX = "agent:"
 

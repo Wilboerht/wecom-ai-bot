@@ -218,14 +218,13 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
 
 def _pick_agent(external_userid: str, open_kfid: str, candidates: list) -> str:
-    """选择转接目标：优先上次服务过的同事，否则轮轮流"""
+    """选择转接目标：优先熟人 > 最少接待量均衡。仅1人时直接返回"""
     if not candidates:
         return ""
-    last = store.get_last_agent(external_userid)
-    if last and last in candidates:
-        return last
-    idx = store.transfer_next_index(open_kfid, len(candidates))
-    return candidates[idx]
+    if len(candidates) == 1:
+        return candidates[0]
+    last = store.get_last_agent(external_userid) if len(candidates) > 1 else ""
+    return store.transfer_pick_agent(open_kfid, candidates, last)
 
 
 def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) -> None:
