@@ -254,13 +254,23 @@ def _process_kf_messages(token: str, open_kfid: str) -> None:
         for msg in data.get("msg_list", []):
             if msg.get("origin") != 3:
                 continue
-            if msg.get("msgtype") != "text":
-                _do_send_kf(open_kfid, msg.get("external_userid", ""), "暂不支持图片/语音，请用文字描述您的问题。", msg.get("msgid", ""))
-                continue
-
-            user_text = msg.get("text", {}).get("content", "").strip()
             external_userid = msg.get("external_userid", "")
             msg_id = msg.get("msgid", "")
+            if msg.get("msgtype") != "text":
+                _transferred.add(external_userid)
+                _do_send_kf(open_kfid, external_userid, "已为您转接人工顾问，请稍候。")
+                if service_userid:
+                    try:
+                        from .wecom.wxkf import transfer_session
+                        transfer_session(
+                            corpid=config.WECOM_CORP_ID, secret=config.WECOM_SECRET,
+                            open_kfid=open_kfid, external_userid=external_userid,
+                            service_userid=service_userid,
+                        )
+                    except Exception:
+                        pass
+                continue
+            user_text = msg.get("text", {}).get("content", "").strip()
             send_time = int(msg.get("send_time", 0))
 
             if not user_text or not external_userid:
