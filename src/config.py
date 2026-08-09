@@ -40,6 +40,7 @@ class Config:
 
         self.SESSION_TTL = int(os.getenv("SESSION_TTL", "1800"))
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+        self.REDIS_URL = os.getenv("REDIS_URL", "")
 
         self._accounts = {}
         self._load_accounts()

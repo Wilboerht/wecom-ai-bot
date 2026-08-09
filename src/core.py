@@ -17,15 +17,11 @@ from .wecom.handler import (
 )
 from .wecom.types import TextMessage, EventMessage
 from .ai.deepseek import chat, AIServiceError
-from .ai.session import session_manager
 from .ai.knowledge import load_knowledge
+from .ai import store
 
 logger = logging.getLogger(__name__)
 
-# ---- 共享全局状态 ----
-_processed_msgids: set = set()
-_transferred: set = set()
-_rate_limit: dict[str, list[float]] = {}
 _account_prompts: dict[str, str] = {}
 
 
@@ -53,17 +49,7 @@ def get_system_prompt(open_kfid: str = "") -> str:
 
 # ---- 速率限制 ----
 def check_rate_limit(user_id: str, send_time: int = 0) -> bool:
-    """检查是否超过速率限制，按消息发送时间计算"""
-    now = time.time()
-    if send_time and now - send_time > 60:
-        return False
-    timestamps = _rate_limit.get(user_id, [])
-    timestamps = [t for t in timestamps if now - t < 60]
-    _rate_limit[user_id] = timestamps
-    if len(timestamps) >= 30:
-        return True
-    timestamps.append(send_time or now)
-    return False
+    return store.ratelimit_check(user_id, send_time)
 
 
 # ---- 普通消息处理（企微/公众号被动回复） ----
@@ -82,7 +68,7 @@ def process_message(message) -> str | None:
             user_text = user_text[:2000]
 
         user_id = message.from_user
-        history = session_manager.get_context(user_id)
+        history = store.session_get(user_id)
         messages = [{"role": "system", "content": get_system_prompt()}]
         messages.extend(history)
         messages.append({"role": "user", "content": user_text})
@@ -92,8 +78,8 @@ def process_message(message) -> str | None:
         except AIServiceError:
             reply = "已为您转接人工顾问，请稍候。"
 
-        session_manager.add_message(user_id, "user", user_text)
-        session_manager.add_message(user_id, "assistant", reply)
+        store.session_add(user_id, "user", user_text)
+        store.session_add(user_id, "assistant", reply)
         return reply
 
     return "暂不支持图片/语音，请用文字描述您的问题。"
@@ -157,8 +143,6 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
     """拉取并处理微信客服消息，支持分页"""
     from .wecom.wxkf import sync_messages
 
-    global _processed_msgids, _transferred
-
     account = config.get_account(open_kfid)
     candidates = account.get("service_userid", "") or config.WECOM_SERVICE_USERID
     if isinstance(candidates, list):
@@ -198,28 +182,24 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             if check_rate_limit(external_userid, send_time):
                 _do_send_kf(open_kfid, external_userid, "您的消息发送过于频繁，请稍后再试。")
                 continue
-            if msg_id in _processed_msgids:
+            if store.msgid_is_duplicate(msg_id, open_kfid):
                 continue
-
-            _processed_msgids.add(msg_id)
-            if len(_processed_msgids) > 500:
-                _processed_msgids = set(sorted(_processed_msgids)[-200:])
 
             # 转人工
             transfer_keywords = ["转人工", "人工客服", "人工服务", "找人工"]
-            if any(kw in user_text for kw in transfer_keywords if len(kw) >= 3) and external_userid not in _transferred:
+            if any(kw in user_text for kw in transfer_keywords if len(kw) >= 3) and not store.transfer_is_active(open_kfid, external_userid):
                 _handle_kf_transfer(open_kfid, external_userid, service_userid)
                 continue
 
             # 恢复 AI
-            if "智能回复" in user_text and external_userid in _transferred:
-                _transferred.discard(external_userid)
+            if "智能回复" in user_text and store.transfer_is_active(open_kfid, external_userid):
+                store.transfer_reset(open_kfid, external_userid)
 
-            if external_userid in _transferred:
+            if store.transfer_is_active(open_kfid, external_userid):
                 continue
 
             # AI 回复
-            history = session_manager.get_context(external_userid)
+            history = store.session_get(external_userid)
             messages = [{"role": "system", "content": get_system_prompt(open_kfid)}]
             messages.extend(history)
             messages.append({"role": "user", "content": user_text[:2000]})
@@ -230,8 +210,8 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 _handle_kf_transfer(open_kfid, external_userid, service_userid)
                 continue
 
-            session_manager.add_message(external_userid, "user", user_text)
-            session_manager.add_message(external_userid, "assistant", reply)
+            store.session_add(external_userid, "user", user_text)
+            store.session_add(external_userid, "assistant", reply)
             _do_send_kf(open_kfid, external_userid, reply, msg_id)
 
         cursor = data.get("next_cursor", "")
@@ -241,8 +221,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
 def _handle_kf_transfer(open_kfid: str, external_userid: str, service_userid: str) -> None:
     """标记转人工 + 发提示 + 调转移 API"""
-    global _transferred
-    _transferred.add(external_userid)
+    store.transfer_mark(open_kfid, external_userid)
     _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
     if service_userid:
         try:
@@ -260,8 +239,7 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, service_userid: st
 
 def _handle_kf_non_text(open_kfid: str, external_userid: str, service_userid: str) -> None:
     """非文本消息 → 自动转人工"""
-    global _transferred
-    _transferred.add(external_userid)
+    store.transfer_mark(open_kfid, external_userid)
     _do_send_kf(open_kfid, external_userid, "已为您转接人工顾问，请稍候。")
     if service_userid:
         try:
