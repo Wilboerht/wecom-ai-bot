@@ -196,3 +196,23 @@ def transfer_next_index(open_kfid: str, total: int) -> int:
     # 内存回退：简单轮转
     import random
     return random.randrange(total)
+
+
+# ---- 用户→接待人绑定（优先上次服务过的同事） ----
+_AGENT_PREFIX = "agent:"
+
+
+def get_last_agent(external_userid: str) -> str:
+    """获取用户上次转接的接待人员"""
+    r = _get_redis()
+    if r:
+        return r.get(f"{_AGENT_PREFIX}{external_userid}") or ""
+    return ""
+
+
+def set_last_agent(external_userid: str, service_userid: str) -> None:
+    """记录用户转接到的接待人员"""
+    r = _get_redis()
+    if r:
+        r.set(f"{_AGENT_PREFIX}{external_userid}", service_userid, ex=86400 * 30)
+    # 内存模式不记录（冷启动丢失可接受）

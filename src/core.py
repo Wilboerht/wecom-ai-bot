@@ -144,11 +144,8 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
     account = config.get_account(open_kfid)
     candidates = account.get("service_userid", "") or config.WECOM_SERVICE_USERID
-    if isinstance(candidates, list):
-        idx = store.transfer_next_index(open_kfid, len(candidates))
-        service_userid = candidates[idx]
-    else:
-        service_userid = candidates
+    if not isinstance(candidates, list):
+        candidates = [candidates] if candidates else []
 
     cursor = ""
     for _ in range(5):
@@ -169,7 +166,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             msg_id = msg.get("msgid", "")
 
             if msg.get("msgtype") != "text":
-                _handle_kf_non_text(open_kfid, external_userid, service_userid)
+                _handle_kf_non_text(open_kfid, external_userid, candidates)
                 continue
 
             user_text = msg.get("text", {}).get("content", "").strip()
@@ -188,7 +185,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             # 转人工
             transfer_keywords = ["转人工", "人工客服", "人工服务", "找人工"]
             if any(kw in user_text for kw in transfer_keywords) and not store.transfer_is_active(open_kfid, external_userid):
-                _handle_kf_transfer(open_kfid, external_userid, service_userid)
+                _handle_kf_transfer(open_kfid, external_userid, candidates)
                 continue
 
             # 恢复 AI
@@ -208,7 +205,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             try:
                 reply = chat(messages)
             except AIServiceError:
-                _handle_kf_transfer(open_kfid, external_userid, service_userid)
+                _handle_kf_transfer(open_kfid, external_userid, candidates)
                 continue
 
             store.session_add(session_key, "user", user_text)
@@ -220,9 +217,23 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             break
 
 
-def _handle_kf_transfer(open_kfid: str, external_userid: str, service_userid: str) -> None:
+def _pick_agent(external_userid: str, open_kfid: str, candidates: list) -> str:
+    """选择转接目标：优先上次服务过的同事，否则轮轮流"""
+    if not candidates:
+        return ""
+    last = store.get_last_agent(external_userid)
+    if last and last in candidates:
+        return last
+    idx = store.transfer_next_index(open_kfid, len(candidates))
+    return candidates[idx]
+
+
+def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) -> None:
     """标记转人工 + 调转移 API + 发提示"""
     store.transfer_mark(open_kfid, external_userid)
+    service_userid = _pick_agent(external_userid, open_kfid, candidates)
+    if service_userid:
+        store.set_last_agent(external_userid, service_userid)
     transferred = False
     if service_userid:
         try:
@@ -240,9 +251,9 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, service_userid: st
     _do_send_kf(open_kfid, external_userid, msg)
 
 
-def _handle_kf_non_text(open_kfid: str, external_userid: str, service_userid: str) -> None:
+def _handle_kf_non_text(open_kfid: str, external_userid: str, candidates: list) -> None:
     """非文本消息 → 自动转人工"""
-    _handle_kf_transfer(open_kfid, external_userid, service_userid)
+    _handle_kf_transfer(open_kfid, external_userid, candidates)
 
 
 def _do_send_kf(open_kfid: str, to_user: str, content: str, msgid: str = "") -> None:
