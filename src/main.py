@@ -4,6 +4,7 @@ NIHPLOD 旎柏 AI 智能客服 — FastAPI 服务入口
 启动: uvicorn src.main:app --host 0.0.0.0 --port 8080
 """
 import logging
+import random
 import traceback
 import time
 import xml.etree.ElementTree as ET
@@ -230,7 +231,11 @@ def _process_kf_messages(token: str, open_kfid: str) -> None:
     global _processed_msgids, _transferred
 
     account = config.get_account(open_kfid)
-    service_userid = account.get("service_userid", "") or config.WECOM_SERVICE_USERID
+    candidates = account.get("service_userid", "") or config.WECOM_SERVICE_USERID
+    if isinstance(candidates, list):
+        service_userid = random.choice(candidates)
+    else:
+        service_userid = candidates
 
     cursor = ""
     for _ in range(5):
