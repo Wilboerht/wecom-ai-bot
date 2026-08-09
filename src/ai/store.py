@@ -177,3 +177,22 @@ def transfer_reset(open_kfid: str, external_userid: str) -> None:
         return
 
     _inmem_transferred.discard(external_userid)
+
+
+# ---- 轮流分配计数器 ----
+_RR_PREFIX = "rr:"
+
+
+def transfer_next_index(open_kfid: str, total: int) -> int:
+    """获取下次转接应该分配给第几个人（轮轮流），Redis原子递增"""
+    if total <= 1:
+        return 0
+    r = _get_redis()
+    if r:
+        idx = r.incr(f"{_RR_PREFIX}{open_kfid}") % total
+        if idx < 0:
+            idx = 0
+        return idx
+    # 内存回退：简单轮转
+    import random
+    return random.randrange(total)

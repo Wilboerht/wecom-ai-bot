@@ -145,7 +145,8 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
     account = config.get_account(open_kfid)
     candidates = account.get("service_userid", "") or config.WECOM_SERVICE_USERID
     if isinstance(candidates, list):
-        service_userid = candidates[0]  # 第一个优先
+        idx = store.transfer_next_index(open_kfid, len(candidates))
+        service_userid = candidates[idx]
     else:
         service_userid = candidates
 
