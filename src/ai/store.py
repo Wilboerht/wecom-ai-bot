@@ -156,25 +156,30 @@ def transfer_is_active(open_kfid: str, external_userid: str) -> bool:
     return external_userid in _inmem_transferred
 
 
-def transfer_touch(open_kfid: str, external_userid: str) -> None:
-    """用户发新消息时更新最后活跃时间"""
+def transfer_mark(open_kfid: str, external_userid: str) -> None:
+    """标记用户为转人工，同时记录标记时间"""
     r = _get_redis()
     if r:
-        r.set(f"{TRANSFER_PREFIX}{open_kfid}:last:{external_userid}", time.time(), ex=3600)
+        key = f"{TRANSFER_PREFIX}{open_kfid}"
+        r.sadd(key, external_userid)
+        r.expire(key, 3600)
+        r.set(f"{TRANSFER_PREFIX}{open_kfid}:time:{external_userid}", time.time(), ex=3600)
+        return
+    _inmem_transferred.add(external_userid)
 
 
 def transfer_check_expire(open_kfid: str, external_userid: str, send_time: int = 0, expire_secs: int = 300) -> bool:
-    """检查转人工是否应过期（超过xx秒无活动视为新会话）。返回True则已清除"""
+    """如果转人工标记超过xx秒且无新消息，自动清除（返回True表示已清除）"""
+    if send_time <= 0:
+        return False
     r = _get_redis()
     if r:
         key = f"{TRANSFER_PREFIX}{open_kfid}"
         if r.sismember(key, external_userid):
-            last = r.get(f"{TRANSFER_PREFIX}{open_kfid}:last:{external_userid}")
-            if last and send_time > 0:
-                if send_time - float(last) > expire_secs:
-                    r.srem(key, external_userid)
-                    return True
-            return False
+            t = r.get(f"{TRANSFER_PREFIX}{open_kfid}:time:{external_userid}")
+            if t and send_time - float(t) > expire_secs:
+                r.srem(key, external_userid)
+                return True
         return False
     return False
 

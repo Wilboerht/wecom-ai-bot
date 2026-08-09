@@ -140,12 +140,21 @@ def handle_callback(body: str, query: dict, crypto: WXBizMsgCrypt) -> dict:
 # ---- 微信客服消息处理 ----
 def process_kf_messages(token: str, open_kfid: str) -> None:
     """拉取并处理微信客服消息，支持分页"""
-    from .wecom.wxkf import sync_messages
+    from .wecom.wxkf import sync_messages, get_session_state
 
     account = config.get_account(open_kfid)
     candidates = account.get("service_userid", "") or config.WECOM_SERVICE_USERID
     if not isinstance(candidates, list):
         candidates = [candidates] if candidates else []
+
+    _state_cache: dict[str, int] = {}
+
+    def _get_state(euid: str) -> int:
+        if euid not in _state_cache:
+            _state_cache[euid] = get_session_state(
+                config.WECOM_CORP_ID, config.WECOM_SECRET, open_kfid, euid
+            )
+        return _state_cache[euid]
 
     cursor = ""
     for _ in range(5):
@@ -182,40 +191,46 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             if store.msgid_is_duplicate(msg_id, open_kfid):
                 continue
 
-            # 更新用户活跃时间 + 检查转人工是否过期
-            store.transfer_touch(open_kfid, external_userid)
-            if send_time > 0:
-                store.transfer_check_expire(open_kfid, external_userid, send_time)
-
-            # 转人工
+            # 转人工关键词
             transfer_keywords = ["转人工", "人工客服", "人工服务", "找人工"]
-            if any(kw in user_text for kw in transfer_keywords) and not store.transfer_is_active(open_kfid, external_userid):
-                _handle_kf_transfer(open_kfid, external_userid, candidates)
+
+            # 查微信原生会话状态: 0=新会话 1=API可处理 2=排队 3=人工接待 4=已结束
+            state = _get_state(external_userid)
+            if state == 3:
+                # 人工正在接待，AI不处理。如用户说"智能回复"则强制转回API
+                if "智能回复" in user_text:
+                    from .wecom.wxkf import transfer_session
+                    transfer_session(
+                        corpid=config.WECOM_CORP_ID, secret=config.WECOM_SECRET,
+                        open_kfid=open_kfid, external_userid=external_userid,
+                        service_state=1,
+                    )
                 continue
 
-            # 恢复 AI
-            if "智能回复" in user_text and store.transfer_is_active(open_kfid, external_userid):
-                store.transfer_reset(open_kfid, external_userid)
+            if state in (0, 1):
+                # AI 可处理
+                if any(kw in user_text for kw in transfer_keywords):
+                    _handle_kf_transfer(open_kfid, external_userid, candidates)
+                    continue
 
-            if store.transfer_is_active(open_kfid, external_userid):
-                continue
+                # AI 回复
+                session_key = f"{open_kfid}:{external_userid}"
+                history = store.session_get(session_key)
+                messages = [{"role": "system", "content": get_system_prompt(open_kfid)}]
+                messages.extend(history)
+                messages.append({"role": "user", "content": user_text[:2000]})
 
-            # AI 回复
-            session_key = f"{open_kfid}:{external_userid}"
-            history = store.session_get(session_key)
-            messages = [{"role": "system", "content": get_system_prompt(open_kfid)}]
-            messages.extend(history)
-            messages.append({"role": "user", "content": user_text[:2000]})
+                try:
+                    reply = chat(messages)
+                except AIServiceError:
+                    _handle_kf_transfer(open_kfid, external_userid, candidates)
+                    continue
 
-            try:
-                reply = chat(messages)
-            except AIServiceError:
-                _handle_kf_transfer(open_kfid, external_userid, candidates)
-                continue
+                store.session_add(session_key, "user", user_text)
+                store.session_add(session_key, "assistant", reply)
+                _do_send_kf(open_kfid, external_userid, reply, msg_id)
 
-            store.session_add(session_key, "user", user_text)
-            store.session_add(session_key, "assistant", reply)
-            _do_send_kf(open_kfid, external_userid, reply, msg_id)
+            # state 2/4 不做处理，等下次回调
 
         cursor = data.get("next_cursor", "")
         if not data.get("has_more") or not cursor:
@@ -233,8 +248,7 @@ def _pick_agent(external_userid: str, open_kfid: str, candidates: list) -> str:
 
 
 def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) -> None:
-    """标记转人工 + 调转移 API + 发提示"""
-    store.transfer_mark(open_kfid, external_userid)
+    """先发转接消息，再调 transfer_session 转到人工接待"""
     service_userid = _pick_agent(external_userid, open_kfid, candidates)
     if service_userid:
         store.set_last_agent(external_userid, service_userid)

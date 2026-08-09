@@ -18,6 +18,7 @@ TOKEN_URL = "https://qyapi.weixin.qq.com/cgi-bin/gettoken"
 SYNC_MSG_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/sync_msg"
 SEND_MSG_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/send_msg"
 TRANSFER_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/service_state/trans"
+STATE_GET_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/service_state/get"
 
 _client = Client(timeout=10, limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
@@ -136,26 +137,19 @@ def transfer_session(
     secret: str,
     open_kfid: str,
     external_userid: str,
-    service_userid: str,
+    service_userid: str = "",
+    service_state: int = 3,
 ) -> bool:
-    """将会话状态变更为「由人工接待」
-
-    Args:
-        open_kfid: 客服账号ID
-        external_userid: 外部用户ID
-        service_userid: 接待人员的企微userid
-
-    Returns:
-        是否转移成功
-    """
+    """变更会话状态，默认转为「由人工接待」(state=3)。state=1 转回智能助手"""
     access_token = get_access_token(corpid, secret)
 
     payload = {
         "open_kfid": open_kfid,
         "external_userid": external_userid,
-        "service_state": 3,
-        "servicer_userid": service_userid,
+        "service_state": service_state,
     }
+    if service_state == 3 and service_userid:
+        payload["servicer_userid"] = service_userid
 
     resp = _client.post(TRANSFER_URL, params={"access_token": access_token}, json=payload)
     data = resp.json()
@@ -166,3 +160,15 @@ def transfer_session(
 
     logger.info("transfer_session 成功: to=%s", service_userid)
     return True
+
+
+def get_session_state(corpid: str, secret: str, open_kfid: str, external_userid: str) -> int:
+    """查询微信客服会话状态: 0=未处理 1=智能助手 2=排队 3=人工接待 4=已结束"""
+    access_token = get_access_token(corpid, secret)
+    resp = _client.post(STATE_GET_URL, params={"access_token": access_token},
+                        json={"open_kfid": open_kfid, "external_userid": external_userid})
+    data = resp.json()
+    if data.get("errcode", 0) != 0:
+        logger.error(f"get_session_state 失败: {data}")
+        return -1
+    return data.get("service_state", 0)
