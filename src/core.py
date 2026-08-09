@@ -199,7 +199,8 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 continue
 
             # AI 回复
-            history = store.session_get(external_userid)
+            session_key = f"{open_kfid}:{external_userid}"
+            history = store.session_get(session_key)
             messages = [{"role": "system", "content": get_system_prompt(open_kfid)}]
             messages.extend(history)
             messages.append({"role": "user", "content": user_text[:2000]})
@@ -210,8 +211,8 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 _handle_kf_transfer(open_kfid, external_userid, service_userid)
                 continue
 
-            store.session_add(external_userid, "user", user_text)
-            store.session_add(external_userid, "assistant", reply)
+            store.session_add(session_key, "user", user_text)
+            store.session_add(session_key, "assistant", reply)
             _do_send_kf(open_kfid, external_userid, reply, msg_id)
 
         cursor = data.get("next_cursor", "")
