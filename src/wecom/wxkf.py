@@ -10,6 +10,8 @@ import time
 import httpx
 from httpx import Client
 
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 TOKEN_URL = "https://qyapi.weixin.qq.com/cgi-bin/gettoken"
