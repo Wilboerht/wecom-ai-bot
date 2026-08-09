@@ -4,7 +4,6 @@
 所有核心处理逻辑在此模块中，入口文件只负责路由和 HTTP 适配。
 """
 import logging
-import random
 import time
 import xml.etree.ElementTree as ET
 from .config import config
@@ -146,7 +145,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
     account = config.get_account(open_kfid)
     candidates = account.get("service_userid", "") or config.WECOM_SERVICE_USERID
     if isinstance(candidates, list):
-        service_userid = random.choice(candidates)
+        service_userid = candidates[0]  # 第一个优先
     else:
         service_userid = candidates
 
