@@ -99,7 +99,7 @@ class TestCallbackMessage:
 
             from unittest.mock import AsyncMock, patch
 
-            with patch("src.main.chat") as mock_chat:
+            with patch("src.core.chat") as mock_chat:
                 mock_chat.return_value = "你好！有什么可以帮你的？"
 
                 resp = await client.post(
