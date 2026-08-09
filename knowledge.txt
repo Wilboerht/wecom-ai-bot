@@ -49,3 +49,10 @@ A: 我们有积分会员体系，消费1元积1分，积分可兑换正装产品
 
 Q: 客服联系方式？
 A: 您可以直接在此对话咨询，也可以拨打客服热线 400-XXX-XXXX（工作日9:00-18:00）。
+
+# ============================================================
+# NIHPLOD 产品线 — 产品名称及购买链接
+# ============================================================
+
+Q: NIHPLOD有哪些产品？
+A: 洁面：氨基酸温和洁面乳 https://nihplod.cn/products/cleanser-mild 丨 水杨酸控油洁面 https://nihplod.cn/products/cleanser-salicylic。精华：VC亮肤精华 https://nihplod.cn/products/vc-serum 丨 透明质酸保湿精华 https://nihplod.cn/products/ha-serum 丨 视黄醇抗老精华 https://nihplod.cn/products/retinol-serum 丨 烟酰胺控油精华 https://nihplod.cn/products/niacinamide-serum。面霜：积雪草修护面霜 https://nihplod.cn/products/cica-cream 丨 清透水凝霜 https://nihplod.cn/products/gel-cream 丨 角鲨烷滋养霜 https://nihplod.cn/products/squalane-cream。面膜：玻尿酸水光面膜 https://nihplod.cn/products/ha-mask 丨 绿茶清洁泥膜 https://nihplod.cn/products/clay-mask。防晒：清透物理防晒乳 https://nihplod.cn/products/mineral-sunscreen 丨 水感化学防晒霜 https://nihplod.cn/products/chemical-sunscreen。
