@@ -163,7 +163,7 @@ def transfer_mark(open_kfid: str, external_userid: str) -> None:
     if r:
         key = f"{TRANSFER_PREFIX}{open_kfid}"
         r.sadd(key, external_userid)
-        r.expire(key, 86400)  # 24小时
+        r.expire(key, 1800)  # 30分钟
         return
 
     _inmem_transferred.add(external_userid)
