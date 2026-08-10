@@ -198,6 +198,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
             # 查微信原生会话状态: 0=新会话 1=API可处理 2=排队 3=人工接待 4=已结束
             state = _get_state(external_userid)
+            logger.info("KF state=%s user=%s text=%s", state, external_userid, user_text[:30])
             if state == 3:
                 # 人工正在接待，AI不处理。如用户说"智能回复"则强制转回API
                 if "智能回复" in user_text:
@@ -212,6 +213,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             if state in (0, 1):
                 # AI 可处理
                 if any(kw in user_text for kw in transfer_keywords):
+                    logger.info("KF transfer triggered: user=%s text=%s", external_userid, user_text)
                     _handle_kf_transfer(open_kfid, external_userid, candidates)
                     continue
 
