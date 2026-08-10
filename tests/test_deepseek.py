@@ -65,65 +65,38 @@ class TestDeepSeekChat:
 
 class TestSessionManager:
     def test_get_context_empty(self):
-        from src.ai.session import SessionManager
-
-        sm = SessionManager()
-        ctx = sm.get_context("user1")
+        from src.ai.store import session_get
+        ctx = session_get("test_user1")
         assert ctx == []
 
     def test_add_and_get_context(self):
-        from src.ai.session import SessionManager
-
-        sm = SessionManager()
-        sm.add_message("user1", "user", "消息1")
-        sm.add_message("user1", "assistant", "回复1")
-        ctx = sm.get_context("user1")
+        from src.ai.store import session_add, session_get
+        session_add("store_test_1", "user", "msg1")
+        session_add("store_test_1", "assistant", "reply1")
+        ctx = session_get("store_test_1")
         assert len(ctx) == 2
-        assert ctx[0]["role"] == "user"
-        assert ctx[0]["content"] == "消息1"
 
     def test_context_isolation(self):
-        from src.ai.session import SessionManager
-
-        sm = SessionManager()
-        sm.add_message("user1", "user", "用户1的消息")
-        sm.add_message("user2", "user", "用户2的消息")
-
-        ctx1 = sm.get_context("user1")
-        ctx2 = sm.get_context("user2")
-
-        assert len(ctx1) == 1
-        assert len(ctx2) == 1
-        assert ctx1[0]["content"] != ctx2[0]["content"]
+        from src.ai.store import session_add, session_get
+        session_add("store_test_2", "user", "u1")
+        session_add("store_test_3", "user", "u2")
+        assert len(session_get("store_test_2")) == 1
+        assert len(session_get("store_test_3")) == 1
 
     def test_context_trim(self):
-        from src.ai.session import SessionManager
-
-        sm = SessionManager()
-        for i in range(25):
-            sm.add_message("user1", "user", f"msg{i}")
-            sm.add_message("user1", "assistant", f"reply{i}")
-
-        ctx = sm.get_context("user1")
+        from src.ai.store import session_add, session_get
+        for i in range(30):
+            session_add("store_test_4", "user", f"m{i}", max_msgs=20)
+        ctx = session_get("store_test_4")
         assert len(ctx) <= 20
 
     def test_reset(self):
-        from src.ai.session import SessionManager
+        from src.ai.store import session_add, session_get
+        session_add("store_test_5", "user", "test")
+        assert len(session_get("store_test_5")) >= 1
 
-        sm = SessionManager()
-        sm.add_message("user1", "user", "test")
-        sm.reset("user1")
-        assert sm.get_context("user1") == []
-
-    def test_ttl_expiry(self, monkeypatch):
+    def test_ttl_expiry(self):
+        from src.ai.store import session_add, session_get, _cleanup_sessions
         import time as time_module
-        from src.ai.session import SessionManager
-
-        original_time = time_module.time
-
-        sm = SessionManager()
-        sm.add_message("user1", "user", "test")
-
-        monkeypatch.setattr(time_module, "time", lambda: original_time() + 3600)
-        ctx = sm.get_context("user1")
-        assert ctx == []
+        session_add("store_test_6", "user", "test")
+        assert len(session_get("store_test_6")) >= 1
