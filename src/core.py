@@ -200,15 +200,17 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             state = _get_state(external_userid)
             logger.info("KF state=%s user=%s text=%s", state, external_userid, user_text[:30])
             if state == 3:
-                # 人工正在接待，AI不处理。如用户说"智能回复"则强制转回API
-                if "智能回复" in user_text:
+                # 人T正在接待。如用户说"智能回复"或发普通消息（无转人工关键词）则转回AI
+                if "智能回复" in user_text or not any(kw in user_text for kw in transfer_keywords):
                     from .wecom.wxkf import transfer_session
                     transfer_session(
                         corpid=config.WECOM_CORP_ID, secret=config.WECOM_SECRET,
                         open_kfid=open_kfid, external_userid=external_userid,
                         service_state=1,
                     )
-                continue
+                    # 转回AI后，继续处理这条消息
+                else:
+                    continue
 
             if state in (0, 1):
                 # AI 可处理
