@@ -174,8 +174,10 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             external_userid = msg.get("external_userid", "")
             msg_id = msg.get("msgid", "")
 
+            # 非文本消息只在 AI 模式下转人工，人工模式下不重复转
             if msg.get("msgtype") != "text":
-                _handle_kf_non_text(open_kfid, external_userid, candidates)
+                if _get_state(external_userid) in (0, 1):
+                    _handle_kf_non_text(open_kfid, external_userid, candidates)
                 continue
 
             user_text = msg.get("text", {}).get("content", "").strip()
