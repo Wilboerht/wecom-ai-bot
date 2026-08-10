@@ -175,10 +175,9 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             external_userid = msg.get("external_userid", "")
             msg_id = msg.get("msgid", "")
 
-            # 非文本消息只在 AI 模式下转人工，人工模式下不重复转
+            # 非文本消息 — 发引导，不转人工
             if msg.get("msgtype") != "text":
-                if _get_state(external_userid) in (0, 1):
-                    _handle_kf_non_text(open_kfid, external_userid, candidates)
+                _do_send_kf(open_kfid, external_userid, "暂不支持图片/语音，请用文字描述您的问题。")
                 continue
 
             user_text = msg.get("text", {}).get("content", "").strip()
@@ -277,11 +276,6 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) 
             )
         except Exception as e:
             logger.error(f"转接失败: {e}")
-
-
-def _handle_kf_non_text(open_kfid: str, external_userid: str, candidates: list) -> None:
-    """非文本消息 → 自动转人工"""
-    _handle_kf_transfer(open_kfid, external_userid, candidates)
 
 
 def _do_send_kf(open_kfid: str, to_user: str, content: str, msgid: str = "") -> None:
