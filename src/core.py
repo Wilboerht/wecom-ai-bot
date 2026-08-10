@@ -175,9 +175,10 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             external_userid = msg.get("external_userid", "")
             msg_id = msg.get("msgid", "")
 
-            # 非文本消息 — 发引导，不转人工
+            # 非文本消息 — 发引导（仅一次，idempotent）
             if msg.get("msgtype") != "text":
-                _do_send_kf(open_kfid, external_userid, "暂不支持图片/语音，请用文字描述您的问题。")
+                if not store.msgid_is_duplicate(msg_id, open_kfid):
+                    _do_send_kf(open_kfid, external_userid, "暂不支持图片/语音，请用文字描述您的问题。")
                 continue
 
             user_text = msg.get("text", {}).get("content", "").strip()
