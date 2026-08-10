@@ -228,3 +228,25 @@ def set_last_agent(external_userid: str, service_userid: str) -> None:
     if r:
         r.set(f"{_AGENT_PREFIX}{external_userid}", service_userid, ex=86400 * 30)
     # 内存模式不记录（冷启动丢失可接受）
+
+
+# ---- 用户护肤档案（长期记忆） ----
+_PROFILE_PREFIX = "profile:"
+
+
+def profile_get(open_kfid: str, external_userid: str) -> dict:
+    """获取用户护肤档案"""
+    r = _get_redis()
+    if r:
+        data = r.get(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}")
+        return json.loads(data) if data else {}
+    return {}
+
+
+def profile_update(open_kfid: str, external_userid: str, fields: dict) -> None:
+    """更新用户护肤档案，合并新字段"""
+    r = _get_redis()
+    if r:
+        current = profile_get(open_kfid, external_userid)
+        current.update(fields)
+        r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)

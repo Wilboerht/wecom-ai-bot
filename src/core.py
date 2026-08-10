@@ -229,7 +229,17 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 # AI 回复
                 session_key = f"{open_kfid}:{external_userid}"
                 history = store.session_get(session_key)
-                messages = [{"role": "system", "content": get_system_prompt(open_kfid)}]
+
+                # 注入用户档案
+                profile = store.profile_get(open_kfid, external_userid)
+                profile_text = ""
+                if profile:
+                    parts = []
+                    for k, v in profile.items():
+                        parts.append(f"{k}: {v}")
+                    profile_text = "【该用户的护肤档案】" + "；".join(parts) + "。依据档案个性化推荐，如档案信息变化请在回复末尾建议更新。"
+
+                messages = [{"role": "system", "content": get_system_prompt(open_kfid) + profile_text}]
                 messages.extend(history)
                 messages.append({"role": "user", "content": user_text[:2000]})
 
