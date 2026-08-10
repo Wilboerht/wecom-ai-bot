@@ -195,7 +195,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 continue
 
             # 转人工关键词
-            transfer_keywords = ["转人工", "人工客服", "人工服务", "找人工"]
+            transfer_keywords = ["转人工", "人工客服", "人工服务", "找人工", "人工", "真人", "转接", "有人吗"]
 
             # 查微信原生会话状态: 0=新会话 1=API可处理 2=排队 3=人工接待 4=已结束
             state = _get_state(external_userid)
