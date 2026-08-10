@@ -254,3 +254,22 @@ def profile_update(open_kfid: str, external_userid: str, fields: dict) -> None:
         current = profile_get(open_kfid, external_userid)
         current.update(fields)
         r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
+
+
+# ---- 隐私授权状态 ----
+_PRIVACY_PREFIX = "privacy:"
+
+
+def privacy_notice_accepted(open_kfid: str, external_userid: str) -> bool:
+    """检查用户是否已确认隐私声明"""
+    r = _get_redis()
+    if r:
+        return r.get(f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}") == "1"
+    return False
+
+
+def privacy_notice_accept(open_kfid: str, external_userid: str) -> None:
+    """记录用户已确认隐私声明"""
+    r = _get_redis()
+    if r:
+        r.set(f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}", "1", ex=86400 * 365)

@@ -206,6 +206,9 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             state = _get_state(external_userid)
             logger.info("KF state=%s user=%s text=%s", state, external_userid, user_text[:30])
 
+            if not store.privacy_notice_accepted(open_kfid, external_userid):
+                store.privacy_notice_accept(open_kfid, external_userid)
+
             if external_userid in _transferred_in_batch:
                 continue
 
