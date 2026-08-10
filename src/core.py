@@ -175,12 +175,15 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             external_userid = msg.get("external_userid", "")
             msg_id = msg.get("msgid", "")
 
-            # 非文本消息 — 只对2分钟内的发一次引导
+            # 非文本消息 — 只记录元信息不存内容，仅对2分钟内的发一次引导
             if msg.get("msgtype") != "text":
+                msgtype = msg.get("msgtype", "unknown")
                 send_time = int(msg.get("send_time", 0))
+                # 安全层：永不上报图片/语音到 Redis 或日志，只记类型
+                logger.info("KF media received: type=%s user=%s (content NOT stored)", msgtype, external_userid)
                 if not send_time or time.time() - send_time < 120:
                     if not store.msgid_is_duplicate(msg_id, open_kfid):
-                        _do_send_kf(open_kfid, external_userid, "暂不支持图片/语音，请用文字描述您的问题。")
+                        _do_send_kf(open_kfid, external_userid, "暂不支持图片/语音，请用文字描述您的问题。如需人工顾问，请回复「转人工」。")
                 continue
 
             user_text = msg.get("text", {}).get("content", "").strip()

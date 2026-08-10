@@ -66,37 +66,48 @@ class TestDeepSeekChat:
 class TestSessionManager:
     def test_get_context_empty(self):
         from src.ai.store import session_get
-        ctx = session_get("test_user1")
+        import uuid
+        ctx = session_get("test_" + uuid.uuid4().hex[:8])
         assert ctx == []
 
     def test_add_and_get_context(self):
         from src.ai.store import session_add, session_get
-        session_add("store_test_1", "user", "msg1")
-        session_add("store_test_1", "assistant", "reply1")
-        ctx = session_get("store_test_1")
+        import uuid
+        uid = "test_" + uuid.uuid4().hex[:8]
+        session_add(uid, "user", "msg1")
+        session_add(uid, "assistant", "reply1")
+        ctx = session_get(uid)
         assert len(ctx) == 2
 
     def test_context_isolation(self):
         from src.ai.store import session_add, session_get
-        session_add("store_test_2", "user", "u1")
-        session_add("store_test_3", "user", "u2")
-        assert len(session_get("store_test_2")) == 1
-        assert len(session_get("store_test_3")) == 1
+        import uuid
+        u1 = "test_" + uuid.uuid4().hex[:8]
+        u2 = "test_" + uuid.uuid4().hex[:8]
+        session_add(u1, "user", "u1")
+        session_add(u2, "user", "u2")
+        assert len(session_get(u1)) == 1
+        assert len(session_get(u2)) == 1
 
     def test_context_trim(self):
         from src.ai.store import session_add, session_get
+        import uuid
+        uid = "test_" + uuid.uuid4().hex[:8]
         for i in range(30):
-            session_add("store_test_4", "user", f"m{i}", max_msgs=20)
-        ctx = session_get("store_test_4")
+            session_add(uid, "user", f"m{i}", max_msgs=20)
+        ctx = session_get(uid)
         assert len(ctx) <= 20
 
     def test_reset(self):
         from src.ai.store import session_add, session_get
-        session_add("store_test_5", "user", "test")
-        assert len(session_get("store_test_5")) >= 1
+        import uuid
+        uid = "test_" + uuid.uuid4().hex[:8]
+        session_add(uid, "user", "test")
+        assert len(session_get(uid)) >= 1
 
     def test_ttl_expiry(self):
-        from src.ai.store import session_add, session_get, _cleanup_sessions
-        import time as time_module
-        session_add("store_test_6", "user", "test")
-        assert len(session_get("store_test_6")) >= 1
+        from src.ai.store import session_add, session_get
+        import uuid
+        uid = "test_" + uuid.uuid4().hex[:8]
+        session_add(uid, "user", "test")
+        assert len(session_get(uid)) >= 1

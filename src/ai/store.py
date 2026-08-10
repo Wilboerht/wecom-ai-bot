@@ -57,7 +57,11 @@ def session_get(user_id: str) -> list[dict]:
 
 
 def session_add(user_id: str, role: str, content: str, max_msgs: int = 20) -> None:
-    """追加消息到会话"""
+    """追加消息到会话。媒体类内容（图片/语音）应只传元信息，不传原始二进制"""
+    # 安全校验：拒绝超长内容（可能是误传的 base64 图片数据）
+    if len(content) > 4096:
+        logger.warning("session_add rejected: content too long (%d chars) — possible media data leak", len(content))
+        content = content[:200] + "...[truncated]"
     r = _get_redis()
     if r:
         key = f"{SESSION_PREFIX}{user_id}"
