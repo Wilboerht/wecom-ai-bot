@@ -264,8 +264,7 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) 
     service_userid = _pick_agent(external_userid, open_kfid, candidates)
     if service_userid:
         store.set_last_agent(external_userid, service_userid)
-    _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
-    if service_userid:
+        _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
         try:
             from .wecom.wxkf import transfer_session
             transfer_session(
@@ -277,6 +276,8 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) 
             )
         except Exception as e:
             logger.error(f"转接失败: {e}")
+    else:
+        _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
 
 
 def _do_send_kf(open_kfid: str, to_user: str, content: str, msgid: str = "") -> None:
