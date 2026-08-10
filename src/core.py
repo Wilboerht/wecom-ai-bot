@@ -148,6 +148,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
         candidates = [candidates] if candidates else []
 
     _state_cache: dict[str, int] = {}
+    _transferred_in_batch: set = set()  # 本批次已转人工的用户，后续消息跳过
 
     def _get_state(euid: str) -> int:
         if euid not in _state_cache:
@@ -199,6 +200,10 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             # 查微信原生会话状态: 0=新会话 1=API可处理 2=排队 3=人工接待 4=已结束
             state = _get_state(external_userid)
             logger.info("KF state=%s user=%s text=%s", state, external_userid, user_text[:30])
+
+            if external_userid in _transferred_in_batch:
+                continue
+
             if state == 3:
                 # 人工接待中。用户发普通消息→先发提示再结束会话→下次消息AI接管
                 if not any(kw in user_text for kw in transfer_keywords):
@@ -215,6 +220,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 # AI 可处理
                 if any(kw in user_text for kw in transfer_keywords):
                     logger.info("KF transfer triggered: user=%s text=%s", external_userid, user_text)
+                    _transferred_in_batch.add(external_userid)
                     _handle_kf_transfer(open_kfid, external_userid, candidates)
                     continue
 
@@ -228,6 +234,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 try:
                     reply = chat(messages)
                 except AIServiceError:
+                    _transferred_in_batch.add(external_userid)
                     _handle_kf_transfer(open_kfid, external_userid, candidates)
                     continue
 
