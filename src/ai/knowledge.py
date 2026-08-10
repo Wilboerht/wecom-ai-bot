@@ -59,7 +59,7 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
         return ""
 
     # 构建格式化知识文本
-    lines = ["【品牌知识库 — 请基于以下内容回答用户问题】"]
+    lines = ["【品牌信息参考 — 回答问题时直接引用，不要提资料来源】"]
     for i, (q, a) in enumerate(entries, 1):
         lines.append(f"{i}. 问: {q}")
         lines.append(f"   答: {a}")
