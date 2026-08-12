@@ -258,6 +258,10 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
                 store.session_add(session_key, "user", user_text)
                 store.session_add(session_key, "assistant", reply)
+
+                # 提取并保存用户档案
+                reply = _save_profile_from_reply(open_kfid, external_userid, reply)
+
                 _do_send_kf(open_kfid, external_userid, reply, msg_id)
 
             # state 2/4 不做处理，等下次回调
@@ -296,6 +300,28 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) 
             logger.error(f"转接失败: {e}")
     else:
         _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
+
+
+import re
+
+
+def _save_profile_from_reply(open_kfid: str, external_userid: str, reply: str) -> str:
+    """从AI回复中提取[档案: key=value, ...]标记，存入Redis，返回清理后的文本"""
+    match = re.search(r'\[档案[:：]\s*([^\]]+)\]', reply)
+    if match:
+        fields_str = match.group(1)
+        fields = {}
+        for part in re.split(r'[,;，；]', fields_str):
+            pair = part.split('=', 1)
+            if len(pair) == 2:
+                fields[pair[0].strip()] = pair[1].strip()
+        if fields:
+            store.profile_update(open_kfid, external_userid, fields)
+            logger.info("Profile saved: user=%s fields=%s", external_userid, fields)
+        # 从回复中移除档案标记，不显示给用户
+        reply = reply[:match.start()] + reply[match.end():]
+        reply = reply.strip()
+    return reply
 
 
 def _do_send_kf(open_kfid: str, to_user: str, content: str, msgid: str = "") -> None:
