@@ -22,6 +22,7 @@ from .wecom.types import TextMessage, EventMessage
 from .ai.deepseek import chat, AIServiceError
 from .ai.knowledge import load_knowledge
 from .ai import store
+from .links import shorten_text, load_links
 
 logger = logging.getLogger(__name__)
 
@@ -333,6 +334,9 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
                 # 硬性清理 Markdown 语法
                 reply = _strip_markdown(reply)
+
+                # 长购买链接替换为短链
+                reply = shorten_text(reply)
 
                 _do_send_kf(open_kfid, external_userid, reply, msg_id)
 

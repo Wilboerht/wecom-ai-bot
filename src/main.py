@@ -6,10 +6,11 @@ NIHPLOD 旎柏 AI 智能客服 — FastAPI 服务入口
 import logging
 import traceback
 from fastapi import FastAPI, Request, Query, BackgroundTasks
-from fastapi.responses import PlainTextResponse, Response
+from fastapi.responses import PlainTextResponse, Response, RedirectResponse
 from .config import config
 from .wecom.crypto import WXBizMsgCrypt
 from .core import handle_callback, process_kf_messages
+from .links import load_links, get_target
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL.upper(), logging.INFO),
@@ -18,6 +19,17 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="NIHPLOD AI 客服", docs_url=None, redoc_url=None)
+
+load_links()
+
+
+@app.get("/l/{code}")
+async def short_link(code: str):
+    """短链跳转: /l/{code} → 真实购买链接"""
+    url = get_target(code)
+    if not url:
+        return Response(content="链接不存在", status_code=404)
+    return RedirectResponse(url=url, status_code=302)
 
 crypto_wecom = WXBizMsgCrypt(
     token=config.WECOM_TOKEN,
