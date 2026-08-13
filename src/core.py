@@ -4,6 +4,7 @@
 所有核心处理逻辑在此模块中，入口文件只负责路由和 HTTP 适配。
 """
 import logging
+import re
 import time
 import xml.etree.ElementTree as ET
 from .config import config
@@ -262,6 +263,9 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 # 提取并保存用户档案
                 reply = _save_profile_from_reply(open_kfid, external_userid, reply)
 
+                # 硬性清理 Markdown 语法
+                reply = _strip_markdown(reply)
+
                 _do_send_kf(open_kfid, external_userid, reply, msg_id)
 
             # state 2/4 不做处理，等下次回调
@@ -302,7 +306,21 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) 
         _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
 
 
-import re
+def _strip_markdown(text: str) -> str:
+    """硬性清理 Markdown 语法，保证发给微信的是纯文本"""
+    # 去掉 **加粗**、*斜体*、__下划线__
+    text = re.sub(r'\*\*(.+?)\*\*', r'\1', text)
+    text = re.sub(r'\*(.+?)\*', r'\1', text)
+    text = re.sub(r'__(.+?)__', r'\1', text)
+    # 去掉 # 标题符号（保留文字）
+    text = re.sub(r'^#{1,6}\s*', '', text, flags=re.MULTILINE)
+    # 去掉 - 列表符号（保留文字）
+    text = re.sub(r'^[-*]\s+', '', text, flags=re.MULTILINE)
+    # 去掉数字列表符号 1. 2. 3.
+    text = re.sub(r'^\d+[.、]\s*', '', text, flags=re.MULTILINE)
+    # 去掉反引号代码块
+    text = re.sub(r'`{1,3}', '', text)
+    return text.strip()
 
 
 def _save_profile_from_reply(open_kfid: str, external_userid: str, reply: str) -> str:
