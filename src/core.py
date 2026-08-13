@@ -232,7 +232,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 if any(kw in user_text for kw in transfer_keywords):
                     logger.info("KF transfer triggered: user=%s text=%s", external_userid, user_text)
                     _transferred_in_batch.add(external_userid)
-                    _handle_kf_transfer(open_kfid, external_userid, candidates)
+                    _handle_kf_transfer(open_kfid, external_userid, candidates, user_text)
                     continue
 
                 # AI 回复
@@ -301,7 +301,7 @@ def is_within_service_hours() -> bool:
     return True
 
 
-def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) -> None:
+def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, user_text: str = "") -> None:
     """先发转接消息，再调 transfer_session 转到人工接待。服务时间外不转人工"""
     if not is_within_service_hours():
         _do_send_kf(
@@ -313,7 +313,13 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) 
     service_userid = _pick_agent(external_userid, open_kfid, candidates)
     if service_userid:
         store.set_last_agent(external_userid, service_userid)
-        _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
+        # 微信客服转人工后，人工侧看不到转接前由 API 处理的消息，
+        # 因此把客户原话带进转接通知，保证人工客服能看到问题内容
+        notice = "正在为您转接人工顾问，请稍候..."
+        if user_text:
+            quoted = user_text.strip()[:100]
+            notice += f"\n客户问题：{quoted}"
+        _do_send_kf(open_kfid, external_userid, notice)
         try:
             from .wecom.wxkf import transfer_session
             transfer_session(
