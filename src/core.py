@@ -457,6 +457,8 @@ def _strip_markdown(text: str) -> str:
     text = re.sub(r'^\d+[.、]\s*', '', text, flags=re.MULTILINE)
     # 去掉反引号代码块
     text = re.sub(r'`{1,3}', '', text)
+    # 压缩多余空行，保留单行换行
+    text = re.sub(r'\n{3,}', '\n\n', text)
     return text.strip()
 
 
