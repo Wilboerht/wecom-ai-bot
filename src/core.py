@@ -358,10 +358,10 @@ def _pick_agent(external_userid: str, open_kfid: str, candidates: list) -> str:
 
 
 def is_within_service_hours() -> bool:
-    """检查当前是否在人工服务时间（默认周一至周六 10:00-20:00，中国时区）"""
+    """检查当前是否在人工服务时间（默认周一至周五 10:00-20:00，中国时区）"""
     now = datetime.now(ZoneInfo("Asia/Shanghai"))
-    # 周一(0)到周六(5)，周日(6)休息
-    if now.weekday() >= 6:
+    # 周一(0)到周五(4)，周六(5)周日(6)休息
+    if now.weekday() >= 5:
         return False
     # 10:00 到 20:00，可通过环境变量调整
     start_hour = int(getattr(config, "SERVICE_START_HOUR", 10) or 10)
@@ -376,7 +376,7 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
     if not is_within_service_hours():
         _do_send_kf(
             open_kfid, external_userid,
-            "您反馈的问题需要人工客服跟进处理，人工客服服务时间为周一至周六 10:00-20:00。建议您在该时间段内再来联系我们，客服会第一时间为您处理。",
+            "您反馈的问题需要人工客服跟进处理，人工客服服务时间为周一至周五 10:00-20:00。建议您在该时间段内再来联系我们，客服会第一时间为您处理。",
         )
         return
 
