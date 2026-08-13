@@ -14,7 +14,12 @@ _knowledge_cache: dict[str, str] = {}
 
 
 def load_knowledge(filepath: str = "knowledge.txt") -> str:
-    """读取知识库文件, 返回格式化的知识文本, 按文件名缓存"""
+    """读取知识库文件, 返回格式化的知识文本, 按文件名缓存
+
+    支持两种内容:
+    1. Q:/A: 问答对 — 解析后格式化为编号列表
+    2. 其他非注释行 — 原样保留（如产品速查表、禁语表）
+    """
     if filepath in _knowledge_cache:
         return _knowledge_cache[filepath]
 
@@ -23,6 +28,7 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
         return ""
 
     entries = []
+    raw_lines = []
     current_q = ""
     current_a = ""
 
@@ -49,22 +55,31 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
             elif current_a:
                 # 续行（多行答案的继续）
                 current_a += "\n" + line
+            else:
+                # 非问答内容（如产品速查表）— 原样保留
+                raw_lines.append(line)
 
     # 保存最后一条
     if current_q and current_a:
         entries.append((current_q, current_a))
 
-    if not entries:
+    if not entries and not raw_lines:
         logger.warning("知识库文件为空或无有效条目")
         return ""
 
     # 构建格式化知识文本
     lines = ["【品牌信息参考 — 回答问题时直接引用，不要提资料来源】"]
+
+    # 先放原始内容（速查表等高密度信息放最前，AI 优先读）
+    if raw_lines:
+        lines.extend(raw_lines)
+        lines.append("")
+
     for i, (q, a) in enumerate(entries, 1):
         lines.append(f"{i}. 问: {q}")
         lines.append(f"   答: {a}")
 
     text = "\n".join(lines)
     _knowledge_cache[filepath] = text
-    logger.info("知识库加载完成 [%s]: %d 条", filepath, len(entries))
+    logger.info("知识库加载完成 [%s]: %d 条问答, %d 行速查", filepath, len(entries), len(raw_lines))
     return text
