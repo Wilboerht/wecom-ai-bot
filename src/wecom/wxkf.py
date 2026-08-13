@@ -19,6 +19,7 @@ SYNC_MSG_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/sync_msg"
 SEND_MSG_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/send_msg"
 TRANSFER_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/service_state/trans"
 STATE_GET_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/service_state/get"
+APP_MSG_URL = "https://qyapi.weixin.qq.com/cgi-bin/message/send"
 
 _client = Client(timeout=10, limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
@@ -172,3 +173,27 @@ def get_session_state(corpid: str, secret: str, open_kfid: str, external_userid:
         logger.error(f"get_session_state 失败: {data}")
         return -1
     return data.get("service_state", 0)
+
+
+def send_agent_notice(corpid: str, secret: str, agent_id: str, to_user: str, content: str) -> bool:
+    """给客服人员发企业微信应用消息（转人工上下文通知，客户不可见）"""
+    if not agent_id or not to_user:
+        logger.warning("send_agent_notice 跳过: agent_id=%s to_user=%s", agent_id, to_user)
+        return False
+
+    access_token = get_access_token(corpid, secret)
+    payload = {
+        "touser": to_user,
+        "msgtype": "text",
+        "agentid": int(agent_id),
+        "text": {"content": content},
+    }
+    resp = _client.post(APP_MSG_URL, params={"access_token": access_token}, json=payload)
+    data = resp.json()
+
+    if data.get("errcode", 0) != 0:
+        logger.error(f"send_agent_notice 失败: {data}")
+        return False
+
+    logger.info("send_agent_notice 成功: to=%s", to_user)
+    return True

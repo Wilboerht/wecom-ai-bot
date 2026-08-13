@@ -379,13 +379,8 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
     service_userid = _pick_agent(external_userid, open_kfid, candidates)
     if service_userid:
         store.set_last_agent(external_userid, service_userid)
-        # 微信客服转人工后，人工侧看不到转接前由 API 处理的消息，
-        # 因此把客户原话带进转接通知，保证人工客服能看到问题内容
-        notice = "正在为您转接人工顾问，请稍候..."
-        if user_text:
-            quoted = user_text.strip()[:150]
-            notice += f"\n客户问题：{quoted}"
-        _do_send_kf(open_kfid, external_userid, notice)
+        # 客户侧只看到转接提示；问题上下文通过企业微信应用消息单独发给客服
+        _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
         try:
             from .wecom.wxkf import transfer_session
             transfer_session(
@@ -397,6 +392,18 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
             )
         except Exception as e:
             logger.error(f"转接失败: {e}")
+        if user_text:
+            try:
+                from .wecom.wxkf import send_agent_notice
+                send_agent_notice(
+                    corpid=config.WECOM_CORP_ID,
+                    secret=config.WECOM_SECRET,
+                    agent_id=config.WECOM_AGENT_ID,
+                    to_user=service_userid,
+                    content=f"【微信客服转人工】\n客户问题：{user_text.strip()[:200]}",
+                )
+            except Exception as e:
+                logger.error(f"客服通知发送失败: {e}")
     else:
         _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
 
