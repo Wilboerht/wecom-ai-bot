@@ -292,7 +292,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
             if state in (0, 1):
                 # AI 可处理
-                if any(kw in user_text for kw in transfer_keywords):
+                if any(kw in user_text for kw in transfer_keywords) and not _is_policy_question(user_text):
                     logger.info("KF transfer triggered: user=%s text=%s", external_userid, user_text)
                     _transferred_in_batch.add(external_userid)
                     _handle_kf_transfer(open_kfid, external_userid, candidates, _merge_flow_context(external_userid, user_text))
@@ -452,6 +452,24 @@ def _order_triggered(text: str) -> bool:
     p1 = re.search(r"(查询|查|看|找|跟踪).{0,8}(订单|物流|快递)", text)
     p2 = re.search(r"(订单|物流|快递).{0,8}(查询|查|看|找)", text)
     return bool(p1 or p2)
+
+
+# ---- 政策咨询（不触发转人工） ----
+POLICY_QUESTION_PATTERNS = (
+    "政策", "规则", "流程", "运费", "条件", "标准", "范围",
+    "能不能", "可以吗", "能吗", "怎么退", "如何退", "怎么换", "如何换",
+    "会过敏吗", "会不会过敏", "容易过敏吗",
+)
+
+
+def _is_policy_question(text: str) -> bool:
+    """退换货/过敏等政策咨询不应触发转人工，让 AI 按知识库回答"""
+    if not any(k in text for k in ("退", "换", "过敏")):
+        return False
+    if any(p in text for p in POLICY_QUESTION_PATTERNS):
+        return True
+    # 「能退货吗」「可以换吗」这类疑问句
+    return bool(re.search(r"[退换][^。！？]{0,8}吗", text))
 
 
 def _strip_markdown(text: str) -> str:

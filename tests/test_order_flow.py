@@ -1,6 +1,25 @@
 """订单查询引导流程 — 解析辅助函数测试"""
 
-from src.core import _extract_order_no, _split_channel_order, _order_triggered
+from src.core import _extract_order_no, _split_channel_order, _order_triggered, _is_policy_question
+
+
+class TestPolicyQuestion:
+    def test_policy_question_skips_transfer(self):
+        assert _is_policy_question("你们的退换货政策是什么")
+        assert _is_policy_question("退货运费谁承担")
+        assert _is_policy_question("怎么退货")
+        assert _is_policy_question("产品会过敏吗")
+        assert _is_policy_question("能换货吗")
+
+    def test_action_requests_still_transfer(self):
+        assert not _is_policy_question("我要退货")
+        assert not _is_policy_question("给我退款")
+        assert not _is_policy_question("我过敏了，脸都红了")
+        assert not _is_policy_question("我要投诉")
+
+    def test_irrelevant_text(self):
+        assert not _is_policy_question("你们有哪些产品")
+        assert not _is_policy_question("你好")
 
 
 class TestOrderFlow:
