@@ -74,19 +74,6 @@ A: 您可以直接在此对话咨询，也可以拨打客服热线 待补充（�
 Q: 我想咨询护肤建议和产品搭配，应该找谁？
 A: 我们有专业的护肤顾问可以帮您分析肤质、推荐产品和搭配方案。点击链接咨询：https://work.weixin.qq.com/kfid/kfc7834894b7ee2b86a
 
-Q: 怎么找到护肤顾问？
-A: 通过这个链接即可联系护肤顾问：https://work.weixin.qq.com/kfid/kfc7834894b7ee2b86a
-
-# ============================================================
-
-
-# --- 退货流程 ---
-Q: 如何申请退货？
-A: 联系客服提供订单号和退货原因。退回商品需包装完好未拆封。收到退货后3个工作日内原路退款。质量问题退货运费由我们承担。
-
-Q: 退货地址是什么？
-A: 请在对话中联系客服获取退货地址，不同地区退货仓库可能不同。
-
 # --- 护肤流程 ---
 Q: NIHPLOD产品使用顺序是什么？
 A: 早：云朵洁面→童颜精华露→白魔法面霜→蛋定防晒。晚：云朵洁面→童颜精华露→白魔法面霜（可混合1滴绿魔法护理油）。每周1-2次守护面膜，每周1次黑曜磨砂膏。
@@ -97,6 +84,10 @@ A: 油性肌：云朵洁面+黑曜磨砂膏（每周2次）+白魔法薄涂+蛋�
 Q: 童颜精华露和绿魔法护理油有什么区别？
 A: 童颜精华露是精华液，主打抗老紧致（玻色因+胜肽+富勒烯）。绿魔法护理油是护理油，主打深层滋养修护屏障，可单独使用也可混合面霜。两者可叠加使用。
 
+# --- 广告法禁语（强制遵守） ---
+禁用：百分百、绝对、永久、根治、第一、顶级、治疗、治愈、消炎、杀菌、排毒、见效快、当天见效、永不反弹、无效退款
+替代：有助于、辅助改善、舒缓、修护、调理、维稳、强韧屏障
+
 # NIHPLOD 产品线 — 所有推荐只能来自此清单
 # ============================================================
 
@@ -104,7 +95,7 @@ Q: NIHPLOD有哪些洁面产品？
 A: 净透温和洁面慕斯（云朵洁面）￥680/100ml：氨基酸温和清洁。关键成分：烟酰胺、泛醇、透明质酸钠、扁柏水、牡丹花水。全肤质适用。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3824659499508170825&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/64b7a0c4c142780001f7e41a?xsec_token=XBkQbIwEYzYvrDQnXu0SqclIpHyv4HkAuwYkjeRa-wnCo=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F64b7a0c4c142780001f7e41a%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjRiN2EwYzRjMTQyNzgwMDAxZjdlNDFhP2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D64b7a0c4c142780001f7e415%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786598828&share_id=f07229335eb242d296c12e2b47be32d2] [天猫:https://e.tb.cn/h.8iSg1aJx0fuzOvQ?tk=R6i7TZH90EI]
 
 Q: NIHPLOD有哪些磨砂膏产品？
-A: 均衡磨砂膏（黑曜磨砂膏）￥780/50ml：温和去角质提亮。关键成分：核桃壳粉、壬二酸、生育酚(维E)、迷迭香叶油、艾草叶提取物、葡萄柚籽提取物。每周1-2次。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3577875397465002136&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/64b223ab03887b0001cd91e5?xsec_token=XB8XdORJQf7l6M-F1je7CuYegYSXX97EnRpVaJr6O_rb0=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F64b223ab03887b0001cd91e5%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjRiMjIzYWIwMzg4N2IwMDAxY2Q5MWU1P2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D64b223ab03887b0001cd91e4%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599062&share_id=92c7fdd778a1468a905114de6f31c538] [天猫:https://e.tb.cn/h.8hFMoUpayPP5MtF?tk=GhQkTZHozSB]
+A: 均衡磨砂膏（黑曜磨砂）￥780/50ml：温和去角质提亮。关键成分：核桃壳粉、壬二酸、生育酚(维E)、迷迭香叶油、艾草叶提取物、葡萄柚籽提取物。每周1-2次。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3577875397465002136&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/64b223ab03887b0001cd91e5?xsec_token=XB8XdORJQf7l6M-F1je7CuYegYSXX97EnRpVaJr6O_rb0=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F64b223ab03887b0001cd91e5%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjRiMjIzYWIwMzg4N2IwMDAxY2Q5MWU1P2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D64b223ab03887b0001cd91e4%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599062&share_id=92c7fdd778a1468a905114de6f31c538] [天猫:https://e.tb.cn/h.8hFMoUpayPP5MtF?tk=GhQkTZHozSB]
 
 Q: NIHPLOD有哪些精华露产品？
 A: 时光涅槃臻萃精华露（童颜精华露）￥4,500/30ml：多效抗老，改善细纹/色素/松弛。关键成分：烟酰胺、羟丙基四氢吡喃三醇(玻色因)、双歧杆菌发酵溶胞物、棕榈酰三肽-5、寡肽-1、富勒烯、半乳糖酵母发酵滤液、银耳子实体提取物、东京樱花叶提取物、曲克芦丁、海藻糖、生育酚(维E)。全肤质适用。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3772867019523883266&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/6503fa3e2d78a00001cff62f?xsec_token=XBB_7fRCcAJvazMaaJ9me_1MHdmhjOi9FuiWlO0XU0Rx4=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F6503fa3e2d78a00001cff62f%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjUwM2ZhM2UyZDc4YTAwMDAxY2ZmNjJmP2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D6503fa3d2d78a00001cff62c%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599300&share_id=247a0331754e40d983b4f3b6c09a6a8a] [天猫:https://e.tb.cn/h.86EUFYg4VB6P9sa?tk=PbdXTZHrXKh]
@@ -125,7 +116,7 @@ Q: NIHPLOD有哪些护手霜产品？
 A: 抚纹紧致护手霜（随身笔）￥480/25ml：淡化细纹保湿修护。关键成分：角鲨烷、羟丙基四氢吡喃三醇(玻色因)、依克多因、可溶性胶原、水解胶原、泛醇、霍霍巴酯类、海藻糖、纤细裸藻多糖、乳杆菌。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3719983368344043526&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/672dcef110adb50001cb9f2c?xsec_token=XBuSciVbThraY_XRbyYZ8bejSMI1RAUoO2hlGvrbv2LPY=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F672dcef110adb50001cb9f2c%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjcyZGNlZjExMGFkYjUwMDAxY2I5ZjJjP2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D672dcef110adb50001cb9f2b%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599880&share_id=2eafb60abd3b45a8b5e34f284e6f6f62] [天猫:https://e.tb.cn/h.8SB489RS4VR9TpQ?tk=g9ROTZta8f4]
 
 Q: NIHPLOD有哪些护理油？
-A: 臻萃呵护护理油（绿魔法护理油）￥1,350/30ml：深层修护滋养抗老，可混合面霜或身体乳使用。关键成分：向日葵籽油、霍霍巴籽油、椰子油、月见草油、白池花籽油、檀香油、柠檬籽油、乳香油、杜松果油、姜根油、肉豆蔻籽油。购买：[抖音:PLACEHOLDER_DOUYIN] [小红书:PLACEHOLDER_XHS] [天猫:PLACEHOLDER_TMALL]
+A: 臻萃呵护护理油（绿魔法）￥1,350/30ml：深层修护滋养抗老，可混合面霜或身体乳使用。关键成分：向日葵籽油、霍霍巴籽油、椰子油、月见草油、白池花籽油、檀香油、柠檬籽油、乳香油、杜松果油、姜根油、肉豆蔻籽油。购买：[抖音:PLACEHOLDER_DOUYIN] [小红书:PLACEHOLDER_XHS] [天猫:PLACEHOLDER_TMALL]
 # --- 产品FAQ：云朵洁面 ---
 Q: 云朵洁面适合敏感肌肤吗？
 A: 非常适合。核心清洁成分是温和的氨基酸表活（椰油酰甘氨酸钾）和两性表活（椰油酰胺丙基甜菜碱），不刺激皮肤。扁柏水和牡丹花水有舒缓抗炎作用。建议首次使用前做耳后测试。
@@ -153,135 +144,190 @@ A: 清淡优雅的日本扁柏和牡丹花香氛，高级植物清香。
 # --- 产品FAQ：黑曜磨砂膏 ---
 Q: 黑曜磨砂膏适合敏感肌吗？会刺激皮肤吗？
 A: 核桃壳粉是微米级超细颗粒，搭配壬二酸和艾草提取物舒缓泛红，敏感肌每周1-2次完全OK。
+
 Q: 使用后需要再用洗面奶吗？
 A: 不需要。洗卸合一设计，按摩后温水洗净即可，后续搭配保湿爽肤水。
+
 Q: 孕妇可以用吗？
 A: 不含水杨酸、视黄醇等孕妇慎用成分。建议先在耳后测试。
+
 Q: 可以每天用吗？
 A: 不建议。油性肌每周2次，干性/敏感肌每周1次。过度去角质会破坏屏障。
+
 Q: 可以和酸类产品叠加使用吗？
 A: 不建议。磨砂膏已含温和去角质成分，叠加酸类可能刺激，分开早晚使用。
+
 Q: 迷迭香叶油为什么能控油？
 A: 迷迭香叶油调节皮脂分泌，搭配甘油和乳酸钠，洗后水润不紧绷。
+
 Q: 乳酸去角质会伤屏障吗？
 A: 不会。乳酸是大分子果酸，只作用角质层，搭配乳酸钠保湿缓冲。
+
 Q: 壬二酸在这里的作用是什么？
 A: 角质调节剂+抗炎+控油+抑制黑色素，实现清洁护理二合一。
+
 Q: 用完之后需要特别护理吗？
-A: 必须加强保湿和防晒，立即使用保湿修护类精华露/面霜。
+A: 必须加强保湿和防晒，立即使用保湿修护类精华/面霜。
+
 Q: 对鸡皮肤有帮助吗？
 A: 有辅助改善作用，乳酸+胡桃壳粉去除堆积角质，需坚持配合高强度保湿。
 
 # --- 产品FAQ：守护面膜 ---
 Q: 守护面膜和普通蚕丝膜布有什么区别？
 A: 莱赛尔膜布取自天然植物纤维，比蚕丝膜布更柔软透气，能锁住自重20倍精华，30分钟不干不滴落，无污染可降解。
+
 Q: 守护面膜敏感肌能用吗？
 A: 专为敏感、晒后、特殊美容护理后设计。剔除酒精和香精，添加泛醇和尿素舒缓修护屏障。
+
 Q: 敷完需要洗脸吗？会黏枕头吗？
 A: 无油配方，按摩吸收后清爽不黏腻，直接涂面霜睡觉也不会黏枕头。
+
 Q: 主要功效是什么？
 A: 深层保湿、提亮肤色、舒缓修护，添加乙酰基六肽-8辅助抗初老。
+
 Q: 能每天敷吗？
 A: 建议每周2-3次。皮肤特别干时可连续敷3天急救，之后恢复常规频率。
+
 Q: 使用时有刺痛感正常吗？
 A: 轻微短暂刺痛可能是皮肤极度干燥时的正常反应。若持续刺痛伴泛红请立即停用。
+
 Q: 适合痘痘肌或油皮吗？
 A: 适合。不含厚重油脂，烟酰胺有助调节油脂舒缓炎症。严重脓包爆发期建议暂缓。
+
 Q: 早上敷还是晚上敷效果好？
 A: 晚上敷效果更佳，夜间是皮肤修护黄金时间。白天重要场合妆前可用但务必防晒。
 # --- 产品FAQ：童颜精华露 ---
 Q: 童颜精华露价格不低，值这个价吗？
 A: 完全理解您对价格的考量。我们的定价逻辑是“精简有效”——一瓶30ml的童颜精华露集齐了玻色因+胜肽+富勒烯三重核心抗老成分，相当于将精华、抗老精华和抗氧化精华合而为一，省去了您叠加3-4瓶其他产品的成本与负担。如果您想先感受NIHPLOD的肤感和品质，我建议从白魔法面霜或云朵洁面开始入门，门槛更友好，也能直观体验到脂质体技术的修护力。
+
 Q: 童颜精华露能提拉紧致吗？
 A: 棕榈酰三肽-5指挥皮肤多产胶原蛋白，搭配银耳多糖提升嘭弹感，坚持用会感觉下颌线更清晰。
+
 Q: 20岁预防细纹能用吗？
 A: 20+就能用。年轻肌预防胶原流失改善熬夜干纹，熟龄肌淡化深纹，全年龄段适配。
+
 Q: 用后脸刺痛是正常现象吗？
 A: 可能是透明质酸和依克多因在加速补水。若3分钟内刺痛消失属于正常适应期，持续刺痛请停用。
+
 Q: 适合熬夜党吗？
 A: 超适合。双歧杆菌发酵溶胞物修护熬夜受损肌，富勒烯清除自由基，第二天皮肤不易显疲态。
+
 Q: 停用后皱纹会反弹吗？
 A: 不会。核心成分通过刺激肌肤自身胶原合成来抗皱，改善肌肤自身状态，停用后坚持基础保湿能稳定维持。
+
 Q: 玻色因和胜肽同时出现抗老效果更强吗？
 A: 是的。玻色因促进糖胺聚糖合成让皮肤饱满，棕榈酰三肽-5传递胶原蛋白生产指令，两者协同作用。
+
 Q: 富勒烯这个成分真的有用吗？
 A: 富勒烯是顶级抗氧化成分，像海绵一样高效吸附自由基，主要抵御光老化、预防胶原损伤。
+
 Q: 适合什么肤质和年龄？
 A: 适合有初抗老、提亮、维稳需求的多种肤质。25岁及以上感觉皮肤松弛暗沉的群体。
 # --- 产品FAQ：白魔法面霜 ---
 Q: 白魔法主要解决什么皮肤问题？
 A: 特殊美容护理后泛红、敏感肌屏障修复、淡化细纹。
+
 Q: 夏天用会不会闷痘？
 A: 空气感冰激凌质地，接触皮肤瞬间化开。核心油脂是轻质油，油皮也可以使用。
+
 Q: 多久见效？
 A: 即刻舒缓敏感热感，30分钟缓解泛红，28天改善干纹细纹。
+
 Q: 适合什么肤质？
 A: 所有肤质，尤其特殊美容护理后/干敏、油敏肌。
-Q: 能和维A醇精华露一起用吗？
-A: 可以，是绝佳舒缓搭档。顺序：先精华露后乳化面霜按压上脸，能缓冲A醇刺激和干燥。
+
+Q: 能和维A醇精华一起用吗？
+A: 可以，是绝佳舒缓搭档。顺序：先精华后乳化面霜按压上脸，能缓冲A醇刺激和干燥。
+
 Q: 脂质体修护和普通修护区别？
 A: 普通修护像创可贴，脂质体则是纳米级液体绷带，活性成分直达基底层缓释8小时。
+
 Q: 适合作为刷酸后的修护霜吗？
 A: 非常适合。神经酰胺、红没药醇和燕麦仁油快速舒缓干燥脱皮，重建脂质屏障。
+
 Q: 可以用在脖子和眼周吗？
 A: 可以。成分温和质地丰润，用于颈部预防颈纹，轻点眼周可作为滋润眼霜。
 # --- 产品FAQ：蛋定防晒 ---
 Q: 蛋定防晒和其他大牌防晒比有什么优势？
 A: 专业角度来说，市面上很多高倍防晒（如SPF50+）侧重的是强效防晒伤，适合长时间户外暴晒场景。而我们的蛋定防晒（SPF30 PA+++） 更侧重大都市日常通勤的“防光老化”——也就是一边防御紫外线，一边修护紫外线已经造成的微小损伤。我们添加了二裂酵母发酵溶胞物和燕麦仁油，肤感更像轻润乳液，不闷痘不泛白，尤其适合办公室白领和敏感肌日常使用。如果您是需要长时间户外暴晒，建议选高倍防晒；如果主要是通勤和室内，蛋定防晒的养肤逻辑更适合您
+
 Q: 蛋定防晒防晒值是多少？
 A: SPF30+ PA+++，适合日常通勤、上班、室内和偶尔短时户外。
+
 Q: 需要卸妆吗？
 A: 低倍数物化结合防晒，一般使用洗面奶即可清洁干净。
+
 Q: 适合什么肤质？
 A: 任何肤质。乳液质地清爽不油腻，已通过敏感肌人体测试。
+
 Q: 上脸会泛白吗？
 A: 不会。采用纳米级物理防晒剂，自然提亮肤色不泛白。
+
 Q: 会油腻闷痘吗？
 A: 不会。添加二裂酵母等维稳成分，上脸轻薄水润不油腻。
+
 Q: 这个味道像酒精，含酒精吗？
 A: 不含酒精。清新挥发感来自环己硅氧烷成膜时的正常现象，对皮肤温和不刺激。
+
 Q: 抗氧化成分能预防晒黑吗？
 A: 含生育酚(VE)+双歧杆菌发酵物+燕麦仁油三重抗氧化体系，中和自由基减少紫外线导致的黑色素活化。
+
 Q: 会搓泥吗？
 A: 配方普遍不易搓泥。建议等前面护肤品充分吸收1-2分钟后再上防晒，顺着一个方向轻推。
 # --- 产品FAQ：聚宝瓶身体乳 ---
 Q: 聚宝瓶敏感肌能用吗？
 A: 遵循温和无刺激原则，已剔除酒精和矿物油。添加红没药醇与泛醇协同舒缓。建议首次手腕内侧测试。
+
 Q: 烟酰胺和玻色因有什么用？
 A: 烟酰胺提亮肤色改善暗沉，玻色因促进胶原生成让肌肤紧致有弹性。
+
 Q: 孕妇能用吗？
 A: 没有孕妇慎用成分，孕期皮肤敏感建议先局部试用。
+
 Q: 脸部也能用吗？
 A: 可以。成分豪华却不黏腻，质地清爽易吸收。
+
 Q: 和普通身体乳有什么区别？
 A: 使用了玻色因、胜肽、光甘草定等面部精华级活性成分，解决松弛、暗沉和屏障受损多重问题。
+
 Q: 身体皮肤也需要抗老吗？
 A: 需要。身体肌肤同样会因胶原流失而松弛产生皱纹。玻色因促进胶原生成让全身皮肤紧致饱满。
+
 Q: 香味怎么样？
 A: 淡雅高级的治愈系香型，不冲鼻不廉价，不会与香水冲突。
 # --- 产品FAQ：随身笔护手霜 ---
 Q: 随身笔能淡化手部皱纹吗？
 A: 水解胶原深入真皮层补充胶原蛋白，可溶性胶原形成保湿膜，长期使用帮助淡化手部皱纹。
+
 Q: 对倒刺有没有用？
 A: 有用。泛醇深入改善干燥，角鲨烷和霍霍巴酯类形成滋润保护膜减少倒刺，已有倒刺剪掉后涂抹帮助愈合。
+
 Q: 质地油腻吗？
 A: 慕斯丝绸质感一抹即融，吸收后哑光柔润无油膜残留，涂完即可操作触屏。
+
 Q: 玻色因在护手霜里真的有用吗？
 A: 有用。玻色因促进手部胶原新生，从内部改善真性皱纹让手部肌肤更饱满。
+
 Q: 能淡化手指关节的色素沉着吗？
 A: 可以。烟酰胺有美白作用，依克多因抗氧化促进细胞新陈代谢加速色素分解排出。
+
 Q: 适合送给长辈吗？
 A: 适合。长辈手部更需要强效抗老与修护，功效明确设计高雅。
 # --- 产品FAQ：绿魔法护理油 ---
-Q: 绿魔法护理油是精华露还是油？
-A: 精华级别的护理油。以油养肤，质地如水般清爽，兼具精华露的功效和油脂的滋养。
+Q: 绿魔法护理油是精华还是油？
+A: 精华级别的护理油。以油养肤，质地如水般清爽，兼具精华的功效和油脂的滋养。
+
 Q: 油性肌肤能用吗？
 A: 全肤质可用。质地轻盈吸收后呈丝滑哑光感，霍霍巴油智能调节水油平衡，油敏皮无闷痘风险。
+
 Q: 具体怎么用？
-A: ①作为精华露：爽肤水后面霜前，2-3滴掌心预热按压。②作为功效放大器：1-2滴混合面霜/精华露/身体乳使用。
+A: ①作为精华：爽肤水后面霜前，2-3滴掌心预热按压。②作为功效放大器：1-2滴混合面霜/精华/身体乳使用。
+
 Q: 可以混合粉底液用吗？
 A: 可以。1滴油与粉底液混合能让底妆更服帖滋润，打造自然光泽肌妆效。
+
 Q: 为什么有香味？是香精吗？
 A: 绝无人工香精。所有香气来源于天然植物精油自身的复合香型（檀香、乳香、杜松等）。
+
 Q: 可以当做按摩油或刮痧油用吗？
 A: 非常适合。作为面部按摩或刮痧介质，顺滑度和滋养性极佳。
