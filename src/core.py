@@ -202,8 +202,8 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             if store.msgid_is_duplicate(msg_id, open_kfid):
                 continue
 
-            # 转人工关键词
-            transfer_keywords = ["转人工", "人工客服", "人工服务", "找人工", "人工", "真人", "转接", "有人吗"]
+            # 转人工关键词（账号级配置，品牌客服含纠纷场景词）
+            transfer_keywords = account.get("transfer_keywords") or ["转人工", "人工客服", "人工服务", "找人工", "人工", "真人", "转接", "有人吗"]
 
             # 查微信原生会话状态: 0=新会话 1=API可处理 2=排队 3=人工接待 4=已结束
             state = _get_state(external_userid)
@@ -306,7 +306,7 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) 
     if not is_within_service_hours():
         _do_send_kf(
             open_kfid, external_userid,
-            "人工客服服务时间为周一至周六 10:00-20:00，当前为非服务时间。您可以先告诉我问题，我会尽力帮您解答，或在服务时间内再来联系。",
+            "您反馈的问题需要人工客服跟进处理，人工客服服务时间为周一至周六 10:00-20:00。建议您在该时间段内再来联系我们，客服会第一时间为您处理。",
         )
         return
 
