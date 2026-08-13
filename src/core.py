@@ -3,6 +3,7 @@
 
 所有核心处理逻辑在此模块中，入口文件只负责路由和 HTTP 适配。
 """
+import json
 import logging
 import re
 import time
@@ -160,6 +161,67 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             )
         return _state_cache[euid]
 
+    def _merge_flow_context(euid: str, user_text: str) -> str:
+        """转人工时把订单查询流程里收集到的渠道/订单号并入上下文"""
+        key = _order_flow_key(open_kfid, euid)
+        info = store.kv_get(key)
+        if not info:
+            return user_text
+        store.kv_delete(key)
+        try:
+            d = json.loads(info)
+        except Exception:
+            return user_text
+        parts = [user_text]
+        if d.get("channel"):
+            parts.append(f"购买渠道：{d['channel']}")
+        if d.get("order_no"):
+            parts.append(f"订单号：{d['order_no']}")
+        return "，".join(parts)
+
+    def _handle_order_inquiry(euid: str, user_text: str) -> bool:
+        """订单查询两步引导：先问购买渠道，再问订单号，收集齐转人工。返回 True 表示已处理"""
+        key = _order_flow_key(open_kfid, euid)
+        info = store.kv_get(key)
+        if info:
+            try:
+                d = json.loads(info)
+            except Exception:
+                d = {}
+            if d.get("step") == "orderno":
+                if not _extract_order_no(user_text):
+                    _do_send_kf(open_kfid, euid, "这个看起来不像是订单号，麻烦再发一下订单号哦。")
+                    return True
+                order_no = _extract_order_no(user_text)
+                store.kv_delete(key)
+                _transferred_in_batch.add(euid)
+                _handle_kf_transfer(
+                    open_kfid, euid, candidates,
+                    f"查询订单（购买渠道：{d.get('channel', '')}，订单号：{order_no}）",
+                )
+                return True
+            # step == channel
+            channel, order_no = _split_channel_order(user_text)
+            if order_no:
+                store.kv_delete(key)
+                _transferred_in_batch.add(euid)
+                _handle_kf_transfer(
+                    open_kfid, euid, candidates,
+                    f"查询订单（购买渠道：{channel}，订单号：{order_no}）",
+                )
+                return True
+            d["channel"] = channel
+            d["step"] = "orderno"
+            store.kv_set(key, json.dumps(d, ensure_ascii=False), ORDER_FLOW_TTL)
+            _do_send_kf(open_kfid, euid, "好的，请问您的订单号是多少呢？")
+            return True
+
+        if _order_triggered(user_text):
+            store.kv_set(key, json.dumps({"step": "channel"}, ensure_ascii=False), ORDER_FLOW_TTL)
+            _do_send_kf(open_kfid, euid, "好的，帮您查询订单。请问您是在哪个平台购买的？（微信小铺、小红书、天猫、抖音商城）")
+            return True
+        return False
+
     cursor = ""
     for _ in range(5):
         data = sync_messages(
@@ -232,7 +294,11 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 if any(kw in user_text for kw in transfer_keywords):
                     logger.info("KF transfer triggered: user=%s text=%s", external_userid, user_text)
                     _transferred_in_batch.add(external_userid)
-                    _handle_kf_transfer(open_kfid, external_userid, candidates, user_text)
+                    _handle_kf_transfer(open_kfid, external_userid, candidates, _merge_flow_context(external_userid, user_text))
+                    continue
+
+                # 订单查询引导流程：先问购买渠道，再问订单号，收集齐转人工
+                if _handle_order_inquiry(external_userid, user_text):
                     continue
 
                 # AI 回复
@@ -317,7 +383,7 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
         # 因此把客户原话带进转接通知，保证人工客服能看到问题内容
         notice = "正在为您转接人工顾问，请稍候..."
         if user_text:
-            quoted = user_text.strip()[:100]
+            quoted = user_text.strip()[:150]
             notice += f"\n客户问题：{quoted}"
         _do_send_kf(open_kfid, external_userid, notice)
         try:
@@ -333,6 +399,48 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
             logger.error(f"转接失败: {e}")
     else:
         _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
+
+
+# ---- 订单查询引导流程 ----
+ORDER_FLOW_TTL = 600
+ORDER_TRIGGERS = (
+    "查订单", "查询订单", "查单", "订单号", "订单进度",
+    "查物流", "物流信息", "快递单号", "快递到哪", "物流到哪",
+)
+
+
+def _order_flow_key(open_kfid: str, external_userid: str) -> str:
+    return f"orderflow:{open_kfid}:{external_userid}"
+
+
+def _extract_order_no(text: str) -> str:
+    """从文本提取订单号：带「订单号/单号」前缀的6-32位字母数字，或10位以上纯数字"""
+    m = re.search(r"(?:订单号|单号)[:：\s]*([A-Za-z0-9\-]{6,32})", text)
+    if m:
+        return m.group(1)
+    m = re.search(r"\d{10,}", text)
+    if m:
+        return m.group(0)
+    return ""
+
+
+def _split_channel_order(text: str) -> tuple[str, str]:
+    """渠道回复里可能同时带订单号，拆成 (渠道, 订单号)"""
+    order_no = _extract_order_no(text)
+    if not order_no:
+        return text.strip()[:50], ""
+    m = re.search(r"(?:订单号|单号)[:：\s]*([A-Za-z0-9\-]{6,32})", text) or re.search(r"\d{10,}", text)
+    channel = (text[:m.start()] + text[m.end():]).strip(" ,，。.")
+    return channel[:50], order_no
+
+
+def _order_triggered(text: str) -> bool:
+    if any(t in text for t in ORDER_TRIGGERS):
+        return True
+    # 「帮我查询我的订单」「订单在哪看」这类短语
+    p1 = re.search(r"(查询|查|看|找|跟踪).{0,8}(订单|物流|快递)", text)
+    p2 = re.search(r"(订单|物流|快递).{0,8}(查询|查|看|找)", text)
+    return bool(p1 or p2)
 
 
 def _strip_markdown(text: str) -> str:

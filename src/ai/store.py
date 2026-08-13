@@ -256,6 +256,35 @@ def profile_update(open_kfid: str, external_userid: str, fields: dict) -> None:
         r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
 
 
+# ---- 通用键值存储（短流程状态机） ----
+_inmem_kv: dict[str, str] = {}
+
+
+def kv_set(key: str, value: str, ttl: int = 600) -> None:
+    """写入键值，带过期时间（秒）"""
+    r = _get_redis()
+    if r:
+        r.set(key, value, ex=ttl)
+        return
+    _inmem_kv[key] = value
+
+
+def kv_get(key: str) -> str:
+    """读取键值，不存在返回空串"""
+    r = _get_redis()
+    if r:
+        return r.get(key) or ""
+    return _inmem_kv.get(key, "")
+
+
+def kv_delete(key: str) -> None:
+    """删除键"""
+    r = _get_redis()
+    if r:
+        r.delete(key)
+    _inmem_kv.pop(key, None)
+
+
 # ---- 隐私授权状态 ----
 _PRIVACY_PREFIX = "privacy:"
 
