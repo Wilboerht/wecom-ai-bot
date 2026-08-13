@@ -218,7 +218,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
         if _order_triggered(user_text):
             store.kv_set(key, json.dumps({"step": "channel"}, ensure_ascii=False), ORDER_FLOW_TTL)
-            _do_send_kf(open_kfid, euid, "好的，帮您查询订单。请问您是在哪个平台购买的？（微信小铺、小红书、天猫、抖音商城）")
+            _do_send_kf(open_kfid, euid, "好的，帮您查询订单。请问您是在哪个平台购买的？（微信小铺、小红书、天猫、抖音商城、其它）")
             return True
         return False
 
