@@ -41,6 +41,8 @@ class Config:
         self.SESSION_TTL = self._require_int("SESSION_TTL", 1800)
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
         self.REDIS_URL = os.getenv("REDIS_URL", "")
+        self.SERVICE_START_HOUR = self._require_int("SERVICE_START_HOUR", 10)
+        self.SERVICE_END_HOUR = self._require_int("SERVICE_END_HOUR", 20)
 
         self._accounts = {}
         self._load_accounts()

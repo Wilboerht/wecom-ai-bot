@@ -7,6 +7,8 @@ import logging
 import re
 import time
 import xml.etree.ElementTree as ET
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from .config import config
 from .wecom.crypto import WXBizMsgCrypt, SignatureError, DecryptError
 from .wecom.handler import (
@@ -285,8 +287,29 @@ def _pick_agent(external_userid: str, open_kfid: str, candidates: list) -> str:
     return store.transfer_pick_agent(open_kfid, candidates, last)
 
 
+def is_within_service_hours() -> bool:
+    """检查当前是否在人工服务时间（默认周一至周六 10:00-20:00，中国时区）"""
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    # 周一(0)到周六(5)，周日(6)休息
+    if now.weekday() >= 6:
+        return False
+    # 10:00 到 20:00，可通过环境变量调整
+    start_hour = int(getattr(config, "SERVICE_START_HOUR", 10) or 10)
+    end_hour = int(getattr(config, "SERVICE_END_HOUR", 20) or 20)
+    if now.hour < start_hour or now.hour >= end_hour:
+        return False
+    return True
+
+
 def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list) -> None:
-    """先发转接消息，再调 transfer_session 转到人工接待"""
+    """先发转接消息，再调 transfer_session 转到人工接待。服务时间外不转人工"""
+    if not is_within_service_hours():
+        _do_send_kf(
+            open_kfid, external_userid,
+            "人工客服服务时间为周一至周六 10:00-20:00，当前为非服务时间。您可以先告诉我问题，我会尽力帮您解答，或在服务时间内再来联系。",
+        )
+        return
+
     service_userid = _pick_agent(external_userid, open_kfid, candidates)
     if service_userid:
         store.set_last_agent(external_userid, service_userid)
