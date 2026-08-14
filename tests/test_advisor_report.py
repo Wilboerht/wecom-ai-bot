@@ -38,7 +38,7 @@ class TestBuildProfileFields:
         assert fields["肌肤年龄"] == "28岁"
         assert fields["素颜评分"] == "82分（超越全国87%的用户）"
         assert fields["重点问题"] == "光泽度（58分）、水油平衡（65分）"
-        assert fields["报告ID"] == "sess-1234567890"
+        assert "报告ID" not in fields
 
     def test_partial_report(self):
         fields = advisor_report.build_profile_fields(

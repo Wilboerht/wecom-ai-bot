@@ -79,8 +79,7 @@ def build_profile_fields(report: dict) -> dict:
                 parts.append(label)
         if parts:
             fields["重点问题"] = "、".join(parts)
-    if report.get("sessionId"):
-        fields["报告ID"] = str(report["sessionId"])
+    # 注意：不写「报告ID」等内部字段——档案会注入 AI 系统提示词，内部标识对模型是噪音
     return fields
 
 
