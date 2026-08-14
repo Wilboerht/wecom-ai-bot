@@ -1,26 +1,24 @@
-**服务器信息概览**
+﻿**鏈嶅姟鍣ㄤ俊鎭瑙?*
 
 ```
-名称：nihplod
-账号：root
-密码：Moidas888!
-公网 IP：47.116.125.52
-公网带宽：5 Mbps
-主私网 IP：172.22.245.232
-配置：2 核（vCPU）4 GiB
-操作系统：Ubuntu 24.04 64位
-系统盘大小：ESSD Entry 云盘 80 GiB
-服务器物理位置：华东2（上海）B
-到期时间：2027年3月23日 23:59:59 （阿里云 99 计划，自动续费）
+鍚嶇О锛歯ihplod
+璐﹀彿锛歳oot
+瀵嗙爜锛歁oidas888!
+鍏綉 IP锛?7.116.125.52
+鍏綉甯﹀锛? Mbps
+涓荤缃?IP锛?72.22.245.232
+閰嶇疆锛? 鏍革紙vCPU锛? GiB
+鎿嶄綔绯荤粺锛歎buntu 24.04 64浣?绯荤粺鐩樺ぇ灏忥細ESSD Entry 浜戠洏 80 GiB
+鏈嶅姟鍣ㄧ墿鐞嗕綅缃細鍗庝笢2锛堜笂娴凤級B
+鍒版湡鏃堕棿锛?027骞?鏈?3鏃?23:59:59 锛堥樋閲屼簯 99 璁″垝锛岃嚜鍔ㄧ画璐癸級
 ```
 
-> ⚠️ 本文档包含生产环境敏感信息（密码、密钥等），请勿外传，建议后续迁移至密码管理工具。
-
+> 鈿狅笍 鏈枃妗ｅ寘鍚敓浜х幆澧冩晱鎰熶俊鎭紙瀵嗙爜銆佸瘑閽ョ瓑锛夛紝璇峰嬁澶栦紶锛屽缓璁悗缁縼绉昏嚦瀵嗙爜绠＄悊宸ュ叿銆?
 ---
 
-## 一、服务器基础环境安装
+## 涓€銆佹湇鍔″櫒鍩虹鐜瀹夎
 
-### 1. 系统更新
+### 1. 绯荤粺鏇存柊
 
 ```bash
 sudo apt update && sudo apt upgrade -y
@@ -29,12 +27,12 @@ sudo apt update && sudo apt upgrade -y
 ### 2. Node.js & PM2
 
 ```bash
-# 安装 Node.js 20
+# 瀹夎 Node.js 20
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install nodejs -y
 node -v && npm -v
 
-# 全局安装 PM2（使用 npmmirror 加速）
+# 鍏ㄥ眬瀹夎 PM2锛堜娇鐢?npmmirror 鍔犻€燂級
 npm install -g pm2 --registry=https://registry.npmmirror.com
 ```
 
@@ -45,7 +43,7 @@ sudo apt install postgresql postgresql-contrib -y
 sudo -i -u postgres psql
 ```
 
-在 `psql` 内执行：
+鍦?`psql` 鍐呮墽琛岋細
 
 ```sql
 CREATE USER nihplod_user WITH PASSWORD 'Moidas888!';
@@ -62,93 +60,67 @@ sudo apt install nginx -y
 sudo rm /etc/nginx/sites-enabled/default
 ```
 
-### 5.（可选但推荐）Redis
+### 5.锛堝彲閫変絾鎺ㄨ崘锛塕edis
 
-SSO 相关黑名单（access token 撤销、wechat_exchange_token 兑换）当前默认使用数据库持久化存储（配置 `TOKEN_BLACKLIST_STORAGE=database` 与 `RATE_LIMIT_STORAGE=database`）。单实例够用；若后续水平扩展，建议安装 Redis：
-
+SSO 鐩稿叧榛戝悕鍗曪紙access token 鎾ら攢銆亀echat_exchange_token 鍏戞崲锛夊綋鍓嶉粯璁や娇鐢ㄦ暟鎹簱鎸佷箙鍖栧瓨鍌紙閰嶇疆 `TOKEN_BLACKLIST_STORAGE=database` 涓?`RATE_LIMIT_STORAGE=database`锛夈€傚崟瀹炰緥澶熺敤锛涜嫢鍚庣画姘村钩鎵╁睍锛屽缓璁畨瑁?Redis锛?
 ```bash
 sudo apt install redis-server -y
 sudo systemctl enable redis-server
 ```
 
-并在官网 `.env` 中配置 `REDIS_URL=redis://localhost:6379`。
-
+骞跺湪瀹樼綉 `.env` 涓厤缃?`REDIS_URL=redis://localhost:6379`銆?
 ---
 
-## 二、SSO 架构总览
+## 浜屻€丼SO 鏋舵瀯鎬昏
 
-NIHPLOD 官网作为 **OAuth 2.0 / OIDC 认证中心**，为接入的子项目提供统一登录。BA 系统独立运行，不接入 SSO。
-
+NIHPLOD 瀹樼綉浣滀负 **OAuth 2.0 / OIDC 璁よ瘉涓績**锛屼负鎺ュ叆鐨勫瓙椤圭洰鎻愪緵缁熶竴鐧诲綍銆侭A 绯荤粺鐙珛杩愯锛屼笉鎺ュ叆 SSO銆?
 ```
-┌─────────────────┐      OAuth 2.0 + PKCE S256      ┌──────────────────┐
-│   子项目 SPA    │  ─────────authorize──────────> │                  │
-│  / Next.js /    │  <────────code + state─────────│   NIHPLOD 官网    │
-│  纯 JS 项目     │  ─────────token──────────────> │  (OAuth Provider)│
-│                 │  <─access_token/refresh_token─│                  │
-│                 │  ─────userinfo/introspect────> │                  │
-└─────────────────┘                                └──────────────────┘
-```
+鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?     OAuth 2.0 + PKCE S256      鈹屸攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?鈹?  瀛愰」鐩?SPA    鈹? 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€authorize鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€> 鈹?                 鈹?鈹? / Next.js /    鈹? <鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€code + state鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?  NIHPLOD 瀹樼綉    鈹?鈹? 绾?JS 椤圭洰     鈹? 鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€token鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€> 鈹? (OAuth Provider)鈹?鈹?                鈹? <鈹€access_token/refresh_token鈹€鈹?                 鈹?鈹?                鈹? 鈹€鈹€鈹€鈹€鈹€userinfo/introspect鈹€鈹€鈹€鈹€> 鈹?                 鈹?鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?                               鈹斺攢鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹€鈹?```
 
-### 角色划分
+### 瑙掕壊鍒掑垎
 
-| 项目 | 角色 | Client 类型 | 说明 |
+| 椤圭洰 | 瑙掕壊 | Client 绫诲瀷 | 璇存槑 |
 |---|---|---|---|
-| NIHPLOD 官网 | OAuth Provider | — | 统一签发 access_token / refresh_token / id_token |
-| Skin-Advisor | Public Client | Public | 浏览器 SPA，不传 `client_secret`，走 PKCE |
-| BA-NIHPLOD | 独立认证系统 | — | 自建账号体系，不接入 SSO |
-| WeCom-AI-Bot | 独立服务 | — | Python FastAPI，企业微信 AI 客服，不接入 SSO |
+| NIHPLOD 瀹樼綉 | OAuth Provider | 鈥?| 缁熶竴绛惧彂 access_token / refresh_token / id_token |
+| Skin-Advisor | Public Client | Public | 娴忚鍣?SPA锛屼笉浼?`client_secret`锛岃蛋 PKCE |
+| BA-NIHPLOD | 鐙珛璁よ瘉绯荤粺 | 鈥?| 鑷缓璐﹀彿浣撶郴锛屼笉鎺ュ叆 SSO |
+| WeCom-AI-Bot | 鐙珛鏈嶅姟 | 鈥?| Python FastAPI锛屼紒涓氬井淇?AI 瀹㈡湇锛屼笉鎺ュ叆 SSO |
 
-### 认证流程（子项目）
+### 璁よ瘉娴佺▼锛堝瓙椤圭洰锛?
+1. 瀛愮珯鏈櫥褰曠敤鎴疯烦杞嚦 `https://nihplod.cn/login?return_to=<鎺堟潈绔偣>`銆?2. 鐢ㄦ埛鍦ㄥ畼缃戝畬鎴愮櫥褰曪紙璐﹀彿瀵嗙爜銆佺煭淇°€佸井淇＄瓑锛夈€?3. 瀹樼綉鍥炶皟瀛愮珯 `redirect_uri` 骞舵惡甯?`code` 涓?`state`銆?4. 瀛愮珯鍥炶皟 handler 鐢?`code` 鎹㈠彇 `access_token` / `refresh_token` / `id_token`銆?5. 瀛愮珯鍙椾繚鎶?API 閫氳繃 introspection 鎴栨湰鍦?JWKS 楠岃瘉 access_token銆?
+### SDK 涓庨獙璇佸寘
 
-1. 子站未登录用户跳转至 `https://nihplod.cn/login?return_to=<授权端点>`。
-2. 用户在官网完成登录（账号密码、短信、微信等）。
-3. 官网回调子站 `redirect_uri` 并携带 `code` 与 `state`。
-4. 子站回调 handler 用 `code` 换取 `access_token` / `refresh_token` / `id_token`。
-5. 子站受保护 API 通过 introspection 或本地 JWKS 验证 access_token。
+瀛愰」鐩彲鐩存帴浠?npm 瀹夎锛?
+- `@nihplod/sso-sdk`锛氭巿鏉冪爜 + PKCE 娴佺▼灏佽锛屽惈 `SsoClient`銆乣createCallbackRouteHandler`銆丷eact Provider 绛?- `@nihplod/sso-verify`锛氭湇鍔＄ token 楠岃瘉锛屾敮鎸?Introspection 涓?JWKS
 
-### SDK 与验证包
+瀹樼綉婧愮爜浣嶄簬 `packages/sso-sdk` 涓?`packages/sso-verify`锛屼慨鏀瑰悗闇€瑕侀噸鏂版瀯寤哄苟鍙戝竷鍒?npm锛屽瓙椤圭洰鍐嶅崌绾х増鏈€?
+### 蹇呴厤鐜鍙橀噺
 
-子项目可直接从 npm 安装：
-
-- `@nihplod/sso-sdk`：授权码 + PKCE 流程封装，含 `SsoClient`、`createCallbackRouteHandler`、React Provider 等
-- `@nihplod/sso-verify`：服务端 token 验证，支持 Introspection 与 JWKS
-
-官网源码位于 `packages/sso-sdk` 与 `packages/sso-verify`，修改后需要重新构建并发布到 npm，子项目再升级版本。
-
-### 必配环境变量
-
-**官网（Provider）**：`JWT_ADMIN_SECRET`、`JWT_ACCESS_SECRET`、`JWT_REFRESH_SECRET`、`JWT_ID_TOKEN_SECRET`、`JWT_LOGOUT_SECRET`、`JWT_WECHAT_BIND_SECRET`、`JWT_WECHAT_EXCHANGE_SECRET`、`TOTP_ENCRYPTION_KEY`、`INTERNAL_API_KEYS`、`RATE_LIMIT_STORAGE`、`TOKEN_BLACKLIST_STORAGE`、`OAUTH_CODE_CHALLENGE_REQUIRED`、`CORS_ALLOWED_ORIGINS`。
-
-若启用 RS256 + JWKS，还需配置：`JWT_ACCESS_PRIVATE_KEY`、`JWT_ACCESS_PUBLIC_KEY`、`JWT_ID_TOKEN_PRIVATE_KEY`、`JWT_ID_TOKEN_PUBLIC_KEY`。
-
-**接入 SSO 的子站（Client）**：`NEXT_PUBLIC_SSO_CLIENT_ID`、`NEXT_PUBLIC_SSO_BASE_URL`、`SSO_CLIENT_SECRET`（Confidential Client）、`NEXT_PUBLIC_SSO_REDIRECT_URI`、`SSO_SCOPES`。
-
-**BA 系统**：独立认证，按 BA 自身文档配置 `AUTH_SECRET`、`DATABASE_URL` 等，不需要任何 `SSO_*` 变量。
-
-> **Skin-Advisor 生产环境使用 `.env.production`**（由 `ecosystem.config.js` 中 `env_file: './.env.production'` 指定）。本地开发复制 `.env.example` 为 `.env.local`。生产服务器上不要混用 `.env`、`.env.local` 和 `.env.production`，避免优先级混乱。
-
-> 旧版各子站共享 `JWT_SECRET` 的方案已废弃。官网保留 `JWT_SECRET` 仅用于兼容极个别旧脚本，不参与 SSO token 的签名与验证。接入 SSO 的子站登录态必须走 OAuth 2.0 流程。
-
+**瀹樼綉锛圥rovider锛?*锛歚JWT_ADMIN_SECRET`銆乣JWT_ACCESS_SECRET`銆乣JWT_REFRESH_SECRET`銆乣JWT_ID_TOKEN_SECRET`銆乣JWT_LOGOUT_SECRET`銆乣JWT_WECHAT_BIND_SECRET`銆乣JWT_WECHAT_EXCHANGE_SECRET`銆乣TOTP_ENCRYPTION_KEY`銆乣INTERNAL_API_KEYS`銆乣RATE_LIMIT_STORAGE`銆乣TOKEN_BLACKLIST_STORAGE`銆乣OAUTH_CODE_CHALLENGE_REQUIRED`銆乣CORS_ALLOWED_ORIGINS`銆?
+鑻ュ惎鐢?RS256 + JWKS锛岃繕闇€閰嶇疆锛歚JWT_ACCESS_PRIVATE_KEY`銆乣JWT_ACCESS_PUBLIC_KEY`銆乣JWT_ID_TOKEN_PRIVATE_KEY`銆乣JWT_ID_TOKEN_PUBLIC_KEY`銆?
+**鎺ュ叆 SSO 鐨勫瓙绔欙紙Client锛?*锛歚NEXT_PUBLIC_SSO_CLIENT_ID`銆乣NEXT_PUBLIC_SSO_BASE_URL`銆乣SSO_CLIENT_SECRET`锛圕onfidential Client锛夈€乣NEXT_PUBLIC_SSO_REDIRECT_URI`銆乣SSO_SCOPES`銆?
+**BA 绯荤粺**锛氱嫭绔嬭璇侊紝鎸?BA 鑷韩鏂囨。閰嶇疆 `AUTH_SECRET`銆乣DATABASE_URL` 绛夛紝涓嶉渶瑕佷换浣?`SSO_*` 鍙橀噺銆?
+> **Skin-Advisor 鐢熶骇鐜浣跨敤 `.env.production`**锛堢敱 `ecosystem.config.js` 涓?`env_file: './.env.production'` 鎸囧畾锛夈€傛湰鍦板紑鍙戝鍒?`.env.example` 涓?`.env.local`銆傜敓浜ф湇鍔″櫒涓婁笉瑕佹贩鐢?`.env`銆乣.env.local` 鍜?`.env.production`锛岄伩鍏嶄紭鍏堢骇娣蜂贡銆?
+> 鏃х増鍚勫瓙绔欏叡浜?`JWT_SECRET` 鐨勬柟妗堝凡搴熷純銆傚畼缃戜繚鐣?`JWT_SECRET` 浠呯敤浜庡吋瀹规瀬涓埆鏃ц剼鏈紝涓嶅弬涓?SSO token 鐨勭鍚嶄笌楠岃瘉銆傛帴鍏?SSO 鐨勫瓙绔欑櫥褰曟€佸繀椤昏蛋 OAuth 2.0 娴佺▼銆?
 ---
 
-## 三、项目部署
-
-### 通用部署步骤
+## 涓夈€侀」鐩儴缃?
+### 閫氱敤閮ㄧ讲姝ラ
 
 1. `git clone` / `git pull`
-2. `npm ci --legacy-peer-deps`（生产环境推荐用 `ci`，避免依赖浮动）
-3. 配置 `.env.production`（生产）或 `.env.local`（本地开发）
-4. `npx prisma migrate deploy`（项目已有迁移文件时一律用此命令）
+2. `npm ci --legacy-peer-deps`锛堢敓浜х幆澧冩帹鑽愮敤 `ci`锛岄伩鍏嶄緷璧栨诞鍔級
+3. 閰嶇疆 `.env.production`锛堢敓浜э級鎴?`.env.local`锛堟湰鍦板紑鍙戯級
+4. `npx prisma migrate deploy`锛堥」鐩凡鏈夎縼绉绘枃浠舵椂涓€寰嬬敤姝ゅ懡浠わ級
 5. `npx prisma generate`
 6. `npm run build`
-7. 验证 `.next/prerender-manifest.json` 存在
+7. 楠岃瘉 `.next/prerender-manifest.json` 瀛樺湪
 8. `pm2 start/restart`
 
 ---
 
-### A. 官网（NIHPLOD-Homepage.CN）—— SSO 认证中心
+### A. 瀹樼綉锛圢IHPLOD-Homepage.CN锛夆€斺€?SSO 璁よ瘉涓績
 
-仓库：[https://github.com/Wilboerht/NIHPLOD-Homepage.CN](https://github.com/Wilboerht/NIHPLOD-Homepage.CN)
+浠撳簱锛歔https://github.com/Wilboerht/NIHPLOD-Homepage.CN](https://github.com/Wilboerht/NIHPLOD-Homepage.CN)
 
 ```bash
 mkdir -p /var/www && cd /var/www
@@ -156,31 +128,29 @@ git clone https://github.com/Wilboerht/NIHPLOD-Homepage.CN.git
 cd NIHPLOD-Homepage.CN
 ```
 
-#### 1. 生成独立 JWT Secret
+#### 1. 鐢熸垚鐙珛 JWT Secret
 
-每类 token 必须独立。生成强随机密钥：
-
+姣忕被 token 蹇呴』鐙珛銆傜敓鎴愬己闅忔満瀵嗛挜锛?
 ```bash
 for name in JWT_ADMIN_SECRET JWT_ACCESS_SECRET JWT_REFRESH_SECRET JWT_WECHAT_BIND_SECRET JWT_WECHAT_EXCHANGE_SECRET JWT_ID_TOKEN_SECRET JWT_LOGOUT_SECRET TOTP_ENCRYPTION_KEY; do
   echo "$name=$(openssl rand -hex 32)"
 done
 ```
 
-若启用 RS256 + JWKS（推荐生产环境），运行：
+鑻ュ惎鐢?RS256 + JWKS锛堟帹鑽愮敓浜х幆澧冿級锛岃繍琛岋細
 
 ```bash
 npx tsx scripts/generate-oauth-rs256-keys.ts
 ```
 
-#### 2. 生成内部 API 密钥
+#### 2. 鐢熸垚鍐呴儴 API 瀵嗛挜
 
-子站调用官网 `/api/v1/internal/*` 以及微信模板消息等内部接口时使用：
-
+瀛愮珯璋冪敤瀹樼綉 `/api/v1/internal/*` 浠ュ強寰俊妯℃澘娑堟伅绛夊唴閮ㄦ帴鍙ｆ椂浣跨敤锛?
 ```bash
 npx tsx scripts/generate-internal-api-keys.ts
 ```
 
-#### 3. 配置环境变量
+#### 3. 閰嶇疆鐜鍙橀噺
 
 ```bash
 vim .env.local
@@ -193,7 +163,7 @@ TRUST_PROXY=true
 
 DATABASE_URL="postgresql://nihplod_user:Moidas888!@localhost:5432/nihplod_db?schema=public"
 
-# 每个密钥必须独立、至少 32 字符
+# 姣忎釜瀵嗛挜蹇呴』鐙珛銆佽嚦灏?32 瀛楃
 JWT_ADMIN_SECRET=...
 JWT_ACCESS_SECRET=...
 JWT_REFRESH_SECRET=...
@@ -203,29 +173,28 @@ JWT_ID_TOKEN_SECRET=...
 JWT_LOGOUT_SECRET=...
 TOTP_ENCRYPTION_KEY=...
 
-# 生产推荐启用 RS256 + JWKS
+# 鐢熶骇鎺ㄨ崘鍚敤 RS256 + JWKS
 JWT_ACCESS_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 JWT_ACCESS_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
 JWT_ID_TOKEN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 JWT_ID_TOKEN_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n...\n-----END PUBLIC KEY-----"
 
-# 分布式部署必填：使用数据库持久化黑名单与限流
+# 鍒嗗竷寮忛儴缃插繀濉細浣跨敤鏁版嵁搴撴寔涔呭寲榛戝悕鍗曚笌闄愭祦
 RATE_LIMIT_STORAGE=database
 TOKEN_BLACKLIST_STORAGE=database
 
-# 授权端强制 PKCE（推荐 true）
-OAUTH_CODE_CHALLENGE_REQUIRED=true
+# 鎺堟潈绔己鍒?PKCE锛堟帹鑽?true锛?OAUTH_CODE_CHALLENGE_REQUIRED=true
 
-# 允许的跨域来源，多个用逗号分隔
+# 鍏佽鐨勮法鍩熸潵婧愶紝澶氫釜鐢ㄩ€楀彿鍒嗛殧
 CORS_ALLOWED_ORIGINS=https://advisor.nihplod.cn,https://ba.nihplod.cn
 
-# 内部 API 密钥
+# 鍐呴儴 API 瀵嗛挜
 INTERNAL_API_KEYS='[{"project":"advisor","key":"...","secret":"..."}]'
 
-# 其他原有配置（微信、支付、OSS、SMTP 等）按需补充
+# 鍏朵粬鍘熸湁閰嶇疆锛堝井淇°€佹敮浠樸€丱SS銆丼MTP 绛夛級鎸夐渶琛ュ厖
 ```
 
-#### 4. 数据库迁移与种子
+#### 4. 鏁版嵁搴撹縼绉讳笌绉嶅瓙
 
 ```bash
 npm ci --legacy-peer-deps --registry=https://registry.npmmirror.com
@@ -234,16 +203,13 @@ npx prisma generate
 npm run db:seed
 ```
 
-> **迁移原则**：项目已有 `prisma/migrations/` 后，生产环境一律使用 `npx prisma migrate deploy`。`npx prisma db push` 仅用于本地开发初期、尚未创建迁移文件时。**切勿在同一数据库上混用 `db push` 与 `migrate deploy`**，否则后续迁移会出现 `already exists` 冲突。
->
-> 如果此前误用了 `db push`，冲突报错为 `column/type/relation ... already exists`，解决方式是用 `npx prisma migrate resolve --applied <迁移名>` 把冲突迁移标记为已应用，再重新 `migrate deploy`。
-
-#### 5. 构建与启动
-
+> **杩佺Щ鍘熷垯**锛氶」鐩凡鏈?`prisma/migrations/` 鍚庯紝鐢熶骇鐜涓€寰嬩娇鐢?`npx prisma migrate deploy`銆俙npx prisma db push` 浠呯敤浜庢湰鍦板紑鍙戝垵鏈熴€佸皻鏈垱寤鸿縼绉绘枃浠舵椂銆?*鍒囧嬁鍦ㄥ悓涓€鏁版嵁搴撲笂娣风敤 `db push` 涓?`migrate deploy`**锛屽惁鍒欏悗缁縼绉讳細鍑虹幇 `already exists` 鍐茬獊銆?>
+> 濡傛灉姝ゅ墠璇敤浜?`db push`锛屽啿绐佹姤閿欎负 `column/type/relation ... already exists`锛岃В鍐虫柟寮忔槸鐢?`npx prisma migrate resolve --applied <杩佺Щ鍚?` 鎶婂啿绐佽縼绉绘爣璁颁负宸插簲鐢紝鍐嶉噸鏂?`migrate deploy`銆?
+#### 5. 鏋勫缓涓庡惎鍔?
 ```bash
 npm run build
 
-# 确认构建产物完整
+# 纭鏋勫缓浜х墿瀹屾暣
 ls -lh .next/prerender-manifest.json
 
 pm2 start npm --name "nihplod-app" -- start
@@ -251,19 +217,16 @@ pm2 save
 pm2 startup
 ```
 
-#### 6. Nginx 配置
+#### 6. Nginx 閰嶇疆
 
-由于线上经过 Cloudflare 代理，Nginx 收到的 `remote_addr` 可能是 Cloudflare IP。必须配置 `set_real_ip_from` 与 `real_ip_header`，并把真实协议/域名透传给 Next.js。
-
-`/etc/nginx/sites-available/nihplod`：
-
+鐢变簬绾夸笂缁忚繃 Cloudflare 浠ｇ悊锛孨ginx 鏀跺埌鐨?`remote_addr` 鍙兘鏄?Cloudflare IP銆傚繀椤婚厤缃?`set_real_ip_from` 涓?`real_ip_header`锛屽苟鎶婄湡瀹炲崗璁?鍩熷悕閫忎紶缁?Next.js銆?
+`/etc/nginx/sites-available/nihplod`锛?
 ```nginx
 server {
     listen 80;
     server_name nihplod.cn www.nihplod.cn;
 
-    # Cloudflare 真实 IP（IPv4 示例，IPv6 与完整 CIDR 请按 Cloudflare 官方列表补充）
-    set_real_ip_from 173.245.48.0/20;
+    # Cloudflare 鐪熷疄 IP锛圛Pv4 绀轰緥锛孖Pv6 涓庡畬鏁?CIDR 璇锋寜 Cloudflare 瀹樻柟鍒楄〃琛ュ厖锛?    set_real_ip_from 173.245.48.0/20;
     set_real_ip_from 103.21.244.0/22;
     set_real_ip_from 103.22.200.0/22;
     set_real_ip_from 103.31.4.0/22;
@@ -303,8 +266,7 @@ server {
 }
 ```
 
-启用：
-
+鍚敤锛?
 ```bash
 sudo ln -s /etc/nginx/sites-available/nihplod /etc/nginx/sites-enabled/
 sudo nginx -t
@@ -313,47 +275,43 @@ sudo systemctl restart nginx
 
 ---
 
-### B. BA 系统（BA-NIHPLOD）—— 独立认证
+### B. BA 绯荤粺锛圔A-NIHPLOD锛夆€斺€?鐙珛璁よ瘉
 
-仓库：[https://github.com/Wilboerht/BA-NIHPLOD](https://github.com/Wilboerht/BA-NIHPLOD)
+浠撳簱锛歔https://github.com/Wilboerht/BA-NIHPLOD](https://github.com/Wilboerht/BA-NIHPLOD)
 
-> BA 系统使用自建账号体系，不接入 NIHPLOD SSO，也不需要 `@nihplod/sso-sdk`。按 BA 自身认证逻辑部署即可。
-
+> BA 绯荤粺浣跨敤鑷缓璐﹀彿浣撶郴锛屼笉鎺ュ叆 NIHPLOD SSO锛屼篃涓嶉渶瑕?`@nihplod/sso-sdk`銆傛寜 BA 鑷韩璁よ瘉閫昏緫閮ㄧ讲鍗冲彲銆?
 ```bash
 cd /var/www
 git clone https://ghfast.top/https://github.com/Wilboerht/BA-NIHPLOD.git
 cd BA-NIHPLOD
 ```
 
-#### 1. 配置环境变量
+#### 1. 閰嶇疆鐜鍙橀噺
 
 ```bash
 cat > .env.local << 'EOF'
 DATABASE_URL="postgresql://nihplod_user:Moidas888!@localhost:5432/ba_nihplod_db?schema=public"
-AUTH_SECRET="你的强随机密钥至少32位"
+AUTH_SECRET="浣犵殑寮洪殢鏈哄瘑閽ヨ嚦灏?2浣?
 NEXT_PUBLIC_BASE_URL="https://ba.nihplod.cn"
 
-# BA 其他自有配置按需补充
+# BA 鍏朵粬鑷湁閰嶇疆鎸夐渶琛ュ厖
 EOF
 ```
 
-> BA 系统**不需要**任何 `SSO_*` 环境变量，也不需要在官网后台注册 OAuth Client。
-
-#### 2. 安装依赖与数据库
+> BA 绯荤粺**涓嶉渶瑕?*浠讳綍 `SSO_*` 鐜鍙橀噺锛屼篃涓嶉渶瑕佸湪瀹樼綉鍚庡彴娉ㄥ唽 OAuth Client銆?
+#### 2. 瀹夎渚濊禆涓庢暟鎹簱
 
 ```bash
 npm ci --legacy-peer-deps --registry=https://registry.npmmirror.com
 npx prisma db push
 npx prisma generate
 
-# BA 项目包含 Prisma 不管理的 RLS/触发器/函数/索引，每次 schema.sql 有变更时都要执行
+# BA 椤圭洰鍖呭惈 Prisma 涓嶇鐞嗙殑 RLS/瑙﹀彂鍣?鍑芥暟/绱㈠紩锛屾瘡娆?schema.sql 鏈夊彉鏇存椂閮借鎵ц
 sudo -u postgres psql -d ba_nihplod_db -f db/schema.sql
 ```
 
-> BA 数据库必须**同时执行** `npx prisma db push` 与 `sudo -u postgres psql -d ba_nihplod_db -f db/schema.sql`，否则会出现关联记录丢失或搜索索引缺失。
-
-#### 3. 构建与启动
-
+> BA 鏁版嵁搴撳繀椤?*鍚屾椂鎵ц** `npx prisma db push` 涓?`sudo -u postgres psql -d ba_nihplod_db -f db/schema.sql`锛屽惁鍒欎細鍑虹幇鍏宠仈璁板綍涓㈠け鎴栨悳绱㈢储寮曠己澶便€?
+#### 3. 鏋勫缓涓庡惎鍔?
 ```bash
 npm run build
 pm2 start npm --name "ba-nihplod-app" -- start -- -p 3001
@@ -361,17 +319,16 @@ pm2 save
 pm2 startup
 ```
 
-#### 4. Nginx 配置
+#### 4. Nginx 閰嶇疆
 
-`/etc/nginx/sites-available/ba-nihplod`：
-
+`/etc/nginx/sites-available/ba-nihplod`锛?
 ```nginx
 server {
     listen 80;
     server_name ba.nihplod.cn www.ba.nihplod.cn;
 
     set_real_ip_from 173.245.48.0/20;
-    # ... 其他 Cloudflare CIDR ...
+    # ... 鍏朵粬 Cloudflare CIDR ...
     real_ip_header CF-Connecting-IP;
 
     location /uploads/ {
@@ -402,8 +359,7 @@ server {
 }
 ```
 
-启用：
-
+鍚敤锛?
 ```bash
 sudo ln -s /etc/nginx/sites-available/ba-nihplod /etc/nginx/sites-enabled/
 sudo nginx -t
@@ -412,9 +368,8 @@ sudo systemctl restart nginx
 
 ---
 
-### C. Skin-Advisor（浏览器端 Public Client）
-
-仓库：[https://github.com/Wilboerht/Skin-Advisor](https://github.com/Wilboerht/Skin-Advisor)
+### C. Skin-Advisor锛堟祻瑙堝櫒绔?Public Client锛?
+浠撳簱锛歔https://github.com/Wilboerht/Skin-Advisor](https://github.com/Wilboerht/Skin-Advisor)
 
 ```bash
 cd /var/www
@@ -422,27 +377,27 @@ git clone https://github.com/Wilboerht/Skin-Advisor.git
 cd Skin-Advisor
 ```
 
-#### 1. 在官网后台注册 OAuth Client
+#### 1. 鍦ㄥ畼缃戝悗鍙版敞鍐?OAuth Client
 
-- `client_id`：例如 `skin-advisor`
-- `name`：Skin Advisor
-- `redirect_uris`：`https://advisor.nihplod.cn/api/auth/callback`
-- `scopes`：`openid profile phone`
-- Client Type：Public
-- 保存后**没有 client_secret**
+- `client_id`锛氫緥濡?`skin-advisor`
+- `name`锛歋kin Advisor
+- `redirect_uris`锛歚https://advisor.nihplod.cn/api/auth/callback`
+- `scopes`锛歚openid profile phone`
+- Client Type锛歅ublic
+- 淇濆瓨鍚?*娌℃湁 client_secret**
 
-#### 2. 配置环境变量
+#### 2. 閰嶇疆鐜鍙橀噺
 
 ```bash
 cat > .env.production << 'EOF'
-# ===== 数据库 =====
+# ===== 鏁版嵁搴?=====
 DATABASE_URL="postgresql://nihplod_user:Moidas888!@localhost:5432/skin_advisor_db?schema=public"
 
-# ===== AI 服务 =====
+# ===== AI 鏈嶅姟 =====
 AI_PROVIDER="qwen"
 AI_VISION_PROVIDER="qwen"
 
-# ===== SSO 配置（Public Client）=====
+# ===== SSO 閰嶇疆锛圥ublic Client锛?====
 NEXT_PUBLIC_SITE_URL="https://advisor.nihplod.cn"
 NEXT_PUBLIC_BASE_URL="https://advisor.nihplod.cn"
 NEXT_PUBLIC_SSO_CLIENT_ID="skin-advisor"
@@ -450,34 +405,30 @@ NEXT_PUBLIC_SSO_BASE_URL="https://nihplod.cn"
 NEXT_PUBLIC_SSO_REDIRECT_URI="https://advisor.nihplod.cn/api/auth/callback"
 NEXT_PUBLIC_SSO_SCOPES="openid profile phone"
 
-# ===== API Keys（保留与官网内部接口通信）=====
+# ===== API Keys锛堜繚鐣欎笌瀹樼綉鍐呴儴鎺ュ彛閫氫俊锛?====
 QWEN_API_KEY="..."
 WANXIANG_API_KEY="..."
 VOLC_ACCESSKEY=""
 VOLC_SECRETKEY=""
 
-# ===== 管理员密钥 =====
-ADMIN_SECRET="你的强随机密钥"
-IP_HASH_SALT="你的强随机密钥"
-CRON_SECRET="你的强随机密钥"
+# ===== 绠＄悊鍛樺瘑閽?=====
+ADMIN_SECRET="浣犵殑寮洪殢鏈哄瘑閽?
+IP_HASH_SALT="浣犵殑寮洪殢鏈哄瘑閽?
+CRON_SECRET="浣犵殑寮洪殢鏈哄瘑閽?
 
-# ===== 企业微信 AI 客服联动（二期）=====
-# INTERNAL_API_KEY 需与 wecom-ai-bot 的 .env 保持一致（openssl rand -hex 24 生成）
-INTERNAL_API_KEY="<与客服服务一致的强随机密钥>"
+# ===== 浼佷笟寰俊 AI 瀹㈡湇鑱斿姩锛堜簩鏈燂級=====
+# INTERNAL_API_KEY 闇€涓?wecom-ai-bot 鐨?.env 淇濇寔涓€鑷达紙openssl rand -hex 24 鐢熸垚锛?INTERNAL_API_KEY="<涓庡鏈嶆湇鍔′竴鑷寸殑寮洪殢鏈哄瘑閽?"
 WECOM_BOT_BASE_URL="https://kf.nihplod.cn"
 EOF
 ```
 
-#### 3. 代码改造
-
-安装 SDK：
-
+#### 3. 浠ｇ爜鏀归€?
+瀹夎 SDK锛?
 ```bash
 npm install @nihplod/sso-sdk
 ```
 
-Next.js 回调 handler：
-
+Next.js 鍥炶皟 handler锛?
 ```typescript
 import { createCallbackRouteHandler } from "@nihplod/sso-sdk/next";
 
@@ -488,8 +439,7 @@ export const GET = createCallbackRouteHandler({
 });
 ```
 
-React 登录按钮：
-
+React 鐧诲綍鎸夐挳锛?
 ```tsx
 import { SsoClient } from "@nihplod/sso-sdk";
 
@@ -500,11 +450,10 @@ const sso = new SsoClient({
   scopes: process.env.NEXT_PUBLIC_SSO_SCOPES!,
 });
 
-<button onClick={() => sso.login()}>使用 NIHPLOD 账号登录</button>
+<button onClick={() => sso.login()}>浣跨敤 NIHPLOD 璐﹀彿鐧诲綍</button>
 ```
 
-服务端 API 验证 token：
-
+鏈嶅姟绔?API 楠岃瘉 token锛?
 ```typescript
 import { createTokenVerifier } from "@nihplod/sso-verify";
 
@@ -516,28 +465,18 @@ const verifier = createTokenVerifier({
 });
 ```
 
-#### 4. 安装、构建、部署
-
+#### 4. 瀹夎銆佹瀯寤恒€侀儴缃?
 ```bash
 npm ci --legacy-peer-deps --registry=https://registry.npmmirror.com
 
-# 准备生产环境：加载 .env.production + 验证变量 + prisma generate + migrate deploy
+# 鍑嗗鐢熶骇鐜锛氬姞杞?.env.production + 楠岃瘉鍙橀噺 + prisma generate + migrate deploy
 node scripts/prepare-production.js
 
-# 构建（postbuild 会自动复制 public/ 和 .next/static/ 到 standalone，
-# 并自动创建 .next/standalone/public/uploads → public/uploads 符号链接）
-npm run build
+# 鏋勫缓锛坧ostbuild 浼氳嚜鍔ㄥ鍒?public/ 鍜?.next/static/ 鍒?standalone锛?# 骞惰嚜鍔ㄥ垱寤?.next/standalone/public/uploads 鈫?public/uploads 绗﹀彿閾炬帴锛?npm run build
 ```
 
-> **说明**：
-> - `npx prisma db push` 已替换为 `node scripts/prepare-production.js` 中的 `prisma migrate deploy`。
-> - `rsync` 复制 `public/` 到 standalone 的步骤已删除，因为 `postbuild` 自动完成。
-> - **上传目录结构**：临时文件（游客上传/用户头像）存于 `public/uploads/` 根目录，受 30 天清理策略约束；展品图等永久资产存于 `public/uploads/products/` 子目录，豁免清理。
-> - `.next/standalone/public/uploads` 符号链接已由 `postbuild` 自动创建，指向项目根 `public/uploads/`，确保 standalone 运行时新上传文件写入同一持久化位置。
-> - Nginx `/uploads/` alias 指向 `/var/www/Skin-Advisor/public/uploads/`，由 Nginx 直接提供静态文件，不经过 Node.js。
-
-PM2 配置：
-
+> **璇存槑**锛?> - `npx prisma db push` 宸叉浛鎹负 `node scripts/prepare-production.js` 涓殑 `prisma migrate deploy`銆?> - `rsync` 澶嶅埗 `public/` 鍒?standalone 鐨勬楠ゅ凡鍒犻櫎锛屽洜涓?`postbuild` 鑷姩瀹屾垚銆?> - **涓婁紶鐩綍缁撴瀯**锛氫复鏃舵枃浠讹紙娓稿涓婁紶/鐢ㄦ埛澶村儚锛夊瓨浜?`public/uploads/` 鏍圭洰褰曪紝鍙?30 澶╂竻鐞嗙瓥鐣ョ害鏉燂紱灞曞搧鍥剧瓑姘镐箙璧勪骇瀛樹簬 `public/uploads/products/` 瀛愮洰褰曪紝璞佸厤娓呯悊銆?> - `.next/standalone/public/uploads` 绗﹀彿閾炬帴宸茬敱 `postbuild` 鑷姩鍒涘缓锛屾寚鍚戦」鐩牴 `public/uploads/`锛岀‘淇?standalone 杩愯鏃舵柊涓婁紶鏂囦欢鍐欏叆鍚屼竴鎸佷箙鍖栦綅缃€?> - Nginx `/uploads/` alias 鎸囧悜 `/var/www/Skin-Advisor/public/uploads/`锛岀敱 Nginx 鐩存帴鎻愪緵闈欐€佹枃浠讹紝涓嶇粡杩?Node.js銆?
+PM2 閰嶇疆锛?
 ```bash
 cat > ecosystem.config.js << 'EOF'
 module.exports = {
@@ -571,7 +510,7 @@ pm2 save
 pm2 startup
 ```
 
-#### 5. Crontab 配置
+#### 5. Crontab 閰嶇疆
 
 ```bash
 sudo crontab -e
@@ -580,17 +519,16 @@ sudo touch /var/log/myskin-cron.log
 sudo chmod 644 /var/log/myskin-cron.log
 ```
 
-#### 6. Nginx 配置
+#### 6. Nginx 閰嶇疆
 
-`/etc/nginx/sites-available/skin-advisor`：
-
+`/etc/nginx/sites-available/skin-advisor`锛?
 ```nginx
 server {
     listen 80;
     server_name advisor.nihplod.cn;
 
     set_real_ip_from 173.245.48.0/20;
-    # ... 其他 Cloudflare CIDR ...
+    # ... 鍏朵粬 Cloudflare CIDR ...
     real_ip_header CF-Connecting-IP;
 
     location /uploads/ {
@@ -624,8 +562,7 @@ server {
 }
 ```
 
-启用：
-
+鍚敤锛?
 ```bash
 sudo ln -s /etc/nginx/sites-available/skin-advisor /etc/nginx/sites-enabled/
 sudo nginx -t
@@ -636,19 +573,18 @@ sudo systemctl restart nginx
 
 ---
 
-### D. WeCom-AI-Bot（企业微信 AI 客服）—— 独立服务
+### D. WeCom-AI-Bot锛堜紒涓氬井淇?AI 瀹㈡湇锛夆€斺€?鐙珛鏈嶅姟
 
-仓库：[https://github.com/Wilboerht/wecom-ai-bot](https://github.com/Wilboerht/wecom-ai-bot)
+浠撳簱锛歔https://github.com/Wilboerht/wecom-ai-bot](https://github.com/Wilboerht/wecom-ai-bot)
 
-> Python FastAPI 项目，不接入 SSO。通过企业微信回调 + DeepSeek API 实现 C 端微信客服 AI 自动回复，支持转人工。
-
+> Python FastAPI 椤圭洰锛屼笉鎺ュ叆 SSO銆傞€氳繃浼佷笟寰俊鍥炶皟 + DeepSeek API 瀹炵幇 C 绔井淇″鏈?AI 鑷姩鍥炲锛屾敮鎸佽浆浜哄伐銆?
 ```bash
 cd /var/www
 git clone https://github.com/Wilboerht/wecom-ai-bot.git
 cd wecom-ai-bot
 ```
 
-#### 1. 配置环境变量
+#### 1. 閰嶇疆鐜鍙橀噺
 
 ```bash
 cat > .env << 'EOF'
@@ -659,30 +595,27 @@ WECOM_TOKEN=IpsCwAtiShzlOLc
 WECOM_ENCODING_AES_KEY=aJ8XGEkHfmIvAvCHtcJxz3ldzLwGOU7WhqMDBg0OrVW
 DEEPSEEK_API_KEY=sk-51ad4ce5b4874ac38e635dfd83afe2b5
 DEEPSEEK_MODEL=deepseek-chat
-SYSTEM_PROMPT=你是NIHPLOD旎柏的客服顾问。保持专业、尊重、简洁的语气，用词体面。
-SESSION_TTL=1800
+SYSTEM_PROMPT=浣犳槸NIHPLOD鏃庢煆鐨勫鏈嶉【闂€備繚鎸佷笓涓氥€佸皧閲嶃€佺畝娲佺殑璇皵锛岀敤璇嶄綋闈€?SESSION_TTL=1800
 LOG_LEVEL=INFO
 WECOM_SERVICE_USERID=WangHongKun
 
-# ===== 测肤报告联动（二期：结果页 → 客服链接 scene_param → 自动拉取报告写档案）=====
-# INTERNAL_API_KEY 需与 Skin-Advisor 子站 .env.production 保持一致（openssl rand -hex 24 生成）
-INTERNAL_API_KEY=<与子站一致的强随机密钥>
+# ===== 娴嬭偆鎶ュ憡鑱斿姩锛堜簩鏈燂細缁撴灉椤?鈫?瀹㈡湇閾炬帴 scene_param 鈫?鑷姩鎷夊彇鎶ュ憡鍐欐。妗堬級=====
+# INTERNAL_API_KEY 闇€涓?Skin-Advisor 瀛愮珯 .env.production 淇濇寔涓€鑷达紙openssl rand -hex 24 鐢熸垚锛?INTERNAL_API_KEY=<涓庡瓙绔欎竴鑷寸殑寮洪殢鏈哄瘑閽?
 ADVISOR_REPORT_API_URL=https://advisor.nihplod.cn/api/internal/report-summary
-KF_ADVISOR_OPEN_KFID=kfc7834894b7ee2b86a
+KF_ADVISOR_OPEN_KFID=wkBpRSVwAAeouflfh1MDy58qaCx7oKTA
 KF_SCENE=advisor
 KF_SEND_WELCOME=1
 EOF
 ```
 
-> ⚠️ `.env` 已被 `.gitignore` 排除，不会提交到仓库。首次部署或 `.env` 丢失时需手动重建。
-
-#### 2. 安装依赖（虚拟环境）
+> 鈿狅笍 `.env` 宸茶 `.gitignore` 鎺掗櫎锛屼笉浼氭彁浜ゅ埌浠撳簱銆傞娆￠儴缃叉垨 `.env` 涓㈠け鏃堕渶鎵嬪姩閲嶅缓銆?
+#### 2. 瀹夎渚濊禆锛堣櫄鎷熺幆澧冿級
 
 ```bash
-# 安装 venv（新服务器首次）
+# 瀹夎 venv锛堟柊鏈嶅姟鍣ㄩ娆★級
 apt-get install -y python3-full python3-venv
 
-# 创建虚拟环境
+# 鍒涘缓铏氭嫙鐜
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
@@ -690,16 +623,15 @@ mkdir -p logs
 deactivate
 ```
 
-#### 3. 启动（PM2）
-
+#### 3. 鍚姩锛圥M2锛?
 ```bash
 pm2 start deploy/ecosystem.config.js
 pm2 save
 ```
 
-#### 4. Nginx 配置
+#### 4. Nginx 閰嶇疆
 
-`/etc/nginx/sites-available/wecom-ai`（项目内 `deploy/nginx-kf.conf`）：
+`/etc/nginx/sites-available/wecom-ai`锛堥」鐩唴 `deploy/nginx-kf.conf`锛夛細
 
 ```nginx
 server {
@@ -707,7 +639,7 @@ server {
     server_name kf.nihplod.cn;
 
     set_real_ip_from 173.245.48.0/20;
-    # ... 其他 Cloudflare CIDR ...
+    # ... 鍏朵粬 Cloudflare CIDR ...
     real_ip_header CF-Connecting-IP;
 
     location /callback {
@@ -724,8 +656,7 @@ server {
         proxy_set_header Host $host;
     }
 
-    # 内部 API（advisor 子站服务端调用生成客服链接，带 x-internal-key 校验）
-    location /api/ {
+    # 鍐呴儴 API锛坅dvisor 瀛愮珯鏈嶅姟绔皟鐢ㄧ敓鎴愬鏈嶉摼鎺ワ紝甯?x-internal-key 鏍￠獙锛?    location /api/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -741,8 +672,7 @@ server {
 }
 ```
 
-启用：
-
+鍚敤锛?
 ```bash
 sudo cp /var/www/wecom-ai-bot/deploy/nginx-kf.conf /etc/nginx/sites-available/wecom-ai
 sudo ln -s /etc/nginx/sites-available/wecom-ai /etc/nginx/sites-enabled/
@@ -751,41 +681,29 @@ sudo nginx -t && sudo systemctl reload nginx
 
 #### 5. Cloudflare DNS
 
-| 类型 | 名称 | 内容 | 代理 |
+| 绫诲瀷 | 鍚嶇О | 鍐呭 | 浠ｇ悊 |
 |------|------|------|------|
-| A | `kf` | `47.116.125.52` | ✅ 橙色云朵 |
+| A | `kf` | `47.116.125.52` | 鉁?姗欒壊浜戞湹 |
 
-> 需要关闭 Cloudflare → Security → Browser Integrity Check，否则企微回调会被 1010 拦截。
+> 闇€瑕佸叧闂?Cloudflare 鈫?Security 鈫?Browser Integrity Check锛屽惁鍒欎紒寰洖璋冧細琚?1010 鎷︽埅銆?
+#### 6. 浼佷笟寰俊鍚庡彴閰嶇疆
 
-#### 6. 企业微信后台配置
-
-| 设置项 | 值 |
+| 璁剧疆椤?| 鍊?|
 |--------|-----|
-| 回调 URL | `https://kf.nihplod.cn/callback` |
-| 可信 IP | `47.116.125.52` |
+| 鍥炶皟 URL | `https://kf.nihplod.cn/callback` |
+| 鍙俊 IP | `47.116.125.52` |
 
 ---
 
-## 四、OAuth Client 注册与管理
-
-### 方式一：官网管理后台（推荐）
-
-1. 登录 `https://nihplod.cn/admin`
-2. 左侧菜单 → **SSO 客户端管理**（`/admin/oauth-clients`）
-3. 点击「新建 Client」
-4. 填写：
-   - `client_id`：唯一英文标识，如 `skin-advisor`
-   - `name`：显示名称
-   - `redirect_uris`：回调地址，必须精确匹配（包括协议、域名、路径）
-   - `scopes`：该 client 允许申请的 scope，如 `openid profile phone`
-   - `isActive`：是否启用
-   - `backchannelLogoutUri`：（可选）接收 backchannel logout 的地址
-5. 选择 Client Type：
-   - **Public**：浏览器 SPA、移动端、桌面端（无 client_secret）
-   - **Confidential**：Next.js BFF、后端服务（有 client_secret）
-6. 保存后，Confidential Client 会显示**明文 client_secret**（仅此一次），立即复制到子站 `.env.production`。
-
-### 方式二：命令行直接插入（应急）
+## 鍥涖€丱Auth Client 娉ㄥ唽涓庣鐞?
+### 鏂瑰紡涓€锛氬畼缃戠鐞嗗悗鍙帮紙鎺ㄨ崘锛?
+1. 鐧诲綍 `https://nihplod.cn/admin`
+2. 宸︿晶鑿滃崟 鈫?**SSO 瀹㈡埛绔鐞?*锛坄/admin/oauth-clients`锛?3. 鐐瑰嚮銆屾柊寤?Client銆?4. 濉啓锛?   - `client_id`锛氬敮涓€鑻辨枃鏍囪瘑锛屽 `skin-advisor`
+   - `name`锛氭樉绀哄悕绉?   - `redirect_uris`锛氬洖璋冨湴鍧€锛屽繀椤荤簿纭尮閰嶏紙鍖呮嫭鍗忚銆佸煙鍚嶃€佽矾寰勶級
+   - `scopes`锛氳 client 鍏佽鐢宠鐨?scope锛屽 `openid profile phone`
+   - `isActive`锛氭槸鍚﹀惎鐢?   - `backchannelLogoutUri`锛氾紙鍙€夛級鎺ユ敹 backchannel logout 鐨勫湴鍧€
+5. 閫夋嫨 Client Type锛?   - **Public**锛氭祻瑙堝櫒 SPA銆佺Щ鍔ㄧ銆佹闈㈢锛堟棤 client_secret锛?   - **Confidential**锛歂ext.js BFF銆佸悗绔湇鍔★紙鏈?client_secret锛?6. 淇濆瓨鍚庯紝Confidential Client 浼氭樉绀?*鏄庢枃 client_secret**锛堜粎姝や竴娆★級锛岀珛鍗冲鍒跺埌瀛愮珯 `.env.production`銆?
+### 鏂瑰紡浜岋細鍛戒护琛岀洿鎺ユ彃鍏ワ紙搴旀€ワ級
 
 ```bash
 cd /var/www/NIHPLOD-Homepage.CN
@@ -812,19 +730,17 @@ const bcrypt = require('bcryptjs');
 "
 ```
 
-> BA 系统不接入 SSO，不需要注册 OAuth Client。
-
+> BA 绯荤粺涓嶆帴鍏?SSO锛屼笉闇€瑕佹敞鍐?OAuth Client銆?
 ---
 
-## 五、项目更新流程
-
-### 官网
+## 浜斻€侀」鐩洿鏂版祦绋?
+### 瀹樼綉
 
 ```bash
 cd /var/www/NIHPLOD-Homepage.CN
 git pull origin master
 npm ci --legacy-peer-deps --registry=https://registry.npmmirror.com
-npx prisma migrate deploy     # schema 有变更时应用迁移
+npx prisma migrate deploy     # schema 鏈夊彉鏇存椂搴旂敤杩佺Щ
 npx prisma generate
 npm run build
 pm2 restart nihplod-app
@@ -839,43 +755,34 @@ npm ci --legacy-peer-deps --registry=https://registry.npmmirror.com
 npx prisma migrate deploy
 npx prisma generate
 
-# 仅当 db/schema.sql 或 db/migrate-*.sql 有变更时执行
+# 浠呭綋 db/schema.sql 鎴?db/migrate-*.sql 鏈夊彉鏇存椂鎵ц
 sudo -u postgres psql -d ba_nihplod_db -f /var/www/BA-NIHPLOD/db/schema.sql
 
 npm run build
 pm2 restart ba-nihplod-app
 ```
 
-> BA 更新必须**同时**执行 `npx prisma migrate deploy` 与 `sudo -u postgres psql -d ba_nihplod_db -f db/schema.sql`，不可只执行其中一项。
-
+> BA 鏇存柊蹇呴』**鍚屾椂**鎵ц `npx prisma migrate deploy` 涓?`sudo -u postgres psql -d ba_nihplod_db -f db/schema.sql`锛屼笉鍙彧鎵ц鍏朵腑涓€椤广€?
 ### Skin-Advisor
 
 ```bash
 cd /var/www/Skin-Advisor
 
-# 拉取最新代码（不要 reset package-lock.json，生产用 npm ci）
-git pull origin main
+# 鎷夊彇鏈€鏂颁唬鐮侊紙涓嶈 reset package-lock.json锛岀敓浜х敤 npm ci锛?git pull origin main
 npm ci --legacy-peer-deps --registry=https://registry.npmmirror.com
 node scripts/prepare-production.js
 npm run build
 
-# ⚠️ 重要：cron 定时任务每 30 分钟清理 public/uploads/ 根目录中 mtime > 30 天的文件
-# 展品图必须存放在 products/ 子目录下（豁免清理），否则会被误删
-# 如果此前有展品图遗留在根目录，执行迁移：
+# 鈿狅笍 閲嶈锛歝ron 瀹氭椂浠诲姟姣?30 鍒嗛挓娓呯悊 public/uploads/ 鏍圭洰褰曚腑 mtime > 30 澶╃殑鏂囦欢
+# 灞曞搧鍥惧繀椤诲瓨鏀惧湪 products/ 瀛愮洰褰曚笅锛堣眮鍏嶆竻鐞嗭級锛屽惁鍒欎細琚鍒?# 濡傛灉姝ゅ墠鏈夊睍鍝佸浘閬楃暀鍦ㄦ牴鐩綍锛屾墽琛岃縼绉伙細
 #   npx -y tsx scripts/migrate-product-uploads.ts
 
-# 重启 PM2 并重新加载环境变量
-pm2 restart skin-advisor --update-env
+# 閲嶅惎 PM2 骞堕噸鏂板姞杞界幆澧冨彉閲?pm2 restart skin-advisor --update-env
 
-# 健康检查
-sleep 5 && curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3002
+# 鍋ュ悍妫€鏌?sleep 5 && curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3002
 ```
 
-> **说明**：
-> - `postbuild` 自动复制 `public/`（排除 `uploads`）到 `standalone`，并创建 `uploads` 符号链接。
-> - 生产环境 uploads 由 Nginx `location /uploads/` 直接 alias 到 `/var/www/Skin-Advisor/public/uploads/`。
-> - 如果更新涉及迁移脚本（如 `scripts/migrate-product-uploads.ts`），必须在 `npm run build` 之前先执行。
-
+> **璇存槑**锛?> - `postbuild` 鑷姩澶嶅埗 `public/`锛堟帓闄?`uploads`锛夊埌 `standalone`锛屽苟鍒涘缓 `uploads` 绗﹀彿閾炬帴銆?> - 鐢熶骇鐜 uploads 鐢?Nginx `location /uploads/` 鐩存帴 alias 鍒?`/var/www/Skin-Advisor/public/uploads/`銆?> - 濡傛灉鏇存柊娑夊強杩佺Щ鑴氭湰锛堝 `scripts/migrate-product-uploads.ts`锛夛紝蹇呴』鍦?`npm run build` 涔嬪墠鍏堟墽琛屻€?
 ---
 
 ### WeCom-AI-Bot
@@ -889,31 +796,27 @@ deactivate
 pm2 restart wecom-ai
 ```
 
-### SSO SDK 更新与发布
-
-当 `packages/sso-sdk` 或 `packages/sso-verify` 源码有变更时，需要重新构建并发布到 npm，子项目再升级依赖。
-
-#### 1. 发布前准备
-
-- npm 账号已加入 `@nihplod` 组织
-- 已创建 Granular Access Token（@nihplod scope + Publish + bypass 2FA）
-- 本地 npm registry 切到官方源：
+### SSO SDK 鏇存柊涓庡彂甯?
+褰?`packages/sso-sdk` 鎴?`packages/sso-verify` 婧愮爜鏈夊彉鏇存椂锛岄渶瑕侀噸鏂版瀯寤哄苟鍙戝竷鍒?npm锛屽瓙椤圭洰鍐嶅崌绾т緷璧栥€?
+#### 1. 鍙戝竷鍓嶅噯澶?
+- npm 璐﹀彿宸插姞鍏?`@nihplod` 缁勭粐
+- 宸插垱寤?Granular Access Token锛園nihplod scope + Publish + bypass 2FA锛?- 鏈湴 npm registry 鍒囧埌瀹樻柟婧愶細
 
 ```bash
 npm config set registry https://registry.npmjs.org/
-npm config set //registry.npmjs.org/:_authToken npm_你的token
+npm config set //registry.npmjs.org/:_authToken npm_浣犵殑token
 ```
 
-#### 2. 发布 sso-verify
+#### 2. 鍙戝竷 sso-verify
 
 ```bash
 cd /var/www/NIHPLOD-Homepage.CN/packages/sso-verify
 npm run build
-npm version patch   # 或 minor/major
+npm version patch   # 鎴?minor/major
 npm publish --access public
 ```
 
-#### 3. 发布 sso-sdk
+#### 3. 鍙戝竷 sso-sdk
 
 ```bash
 cd /var/www/NIHPLOD-Homepage.CN/packages/sso-sdk
@@ -921,13 +824,13 @@ npm version patch
 npm publish --access public
 ```
 
-#### 4. 切回淘宝镜像
+#### 4. 鍒囧洖娣樺疂闀滃儚
 
 ```bash
 npm config set registry https://registry.npmmirror.com/
 ```
 
-#### 5. 子项目升级 SDK
+#### 5. 瀛愰」鐩崌绾?SDK
 
 ```bash
 cd /var/www/Skin-Advisor
@@ -936,11 +839,10 @@ npm run build
 pm2 restart skin-advisor --update-env
 ```
 
-> **安全提示**：Granular Access Token 只显示一次，泄露后应立即到 npm 网站删除并重新生成。不要把 token 写入项目代码或提交到 git。
-
+> **瀹夊叏鎻愮ず**锛欸ranular Access Token 鍙樉绀轰竴娆★紝娉勯湶鍚庡簲绔嬪嵆鍒?npm 缃戠珯鍒犻櫎骞堕噸鏂扮敓鎴愩€備笉瑕佹妸 token 鍐欏叆椤圭洰浠ｇ爜鎴栨彁浜ゅ埌 git銆?
 ---
 
-## 六、通用运维命令
+## 鍏€侀€氱敤杩愮淮鍛戒护
 
 ### PM2
 
@@ -958,8 +860,7 @@ pm2 save
 pm2 startup
 ```
 
-应用名：`nihplod-app`、`ba-nihplod-app`、`skin-advisor`、`wecom-ai`。
-
+搴旂敤鍚嶏細`nihplod-app`銆乣ba-nihplod-app`銆乣skin-advisor`銆乣wecom-ai`銆?
 ### Nginx
 
 ```bash
@@ -974,109 +875,88 @@ sudo tail -f /var/log/nginx/access.log
 ### PostgreSQL
 
 ```bash
-# 进入 psql
+# 杩涘叆 psql
 sudo -i -u postgres psql
 
-# 测试指定数据库
-sudo -u postgres psql -d <db-name> -c "SELECT 1;"
+# 娴嬭瘯鎸囧畾鏁版嵁搴?sudo -u postgres psql -d <db-name> -c "SELECT 1;"
 
-# 查看连接数
-sudo -u postgres psql -d <db-name> -c "SELECT count(*) FROM pg_stat_activity WHERE datname = '<db-name>';"
+# 鏌ョ湅杩炴帴鏁?sudo -u postgres psql -d <db-name> -c "SELECT count(*) FROM pg_stat_activity WHERE datname = '<db-name>';"
 ```
 
 ---
 
-## 七、SSO 健康检查与端到端验证
-
-### 1. Discovery 端点
+## 涓冦€丼SO 鍋ュ悍妫€鏌ヤ笌绔埌绔獙璇?
+### 1. Discovery 绔偣
 
 ```bash
 curl -s https://nihplod.cn/api/oauth/.well-known/openid-configuration | jq .
 ```
 
-期望返回包含 `issuer`、`authorization_endpoint`、`token_endpoint`、`userinfo_endpoint`、`introspection_endpoint`、`jwks_uri`。
+鏈熸湜杩斿洖鍖呭惈 `issuer`銆乣authorization_endpoint`銆乣token_endpoint`銆乣userinfo_endpoint`銆乣introspection_endpoint`銆乣jwks_uri`銆?
+> 鑻?`issuer` 杩斿洖 `http://localhost:3000`锛岃鏄?Nginx 鏈纭紶閫?`Host` 鎴?`X-Forwarded-Proto`锛岄渶妫€鏌?`proxy_set_header` 涓?`TRUST_PROXY=true`銆?
+### 2. 鎺堟潈绔偣 302
 
-> 若 `issuer` 返回 `http://localhost:3000`，说明 Nginx 未正确传递 `Host` 或 `X-Forwarded-Proto`，需检查 `proxy_set_header` 与 `TRUST_PROXY=true`。
-
-### 2. 授权端点 302
-
-`state` 参数必须足够长（建议 43 字符以上）。
-
+`state` 鍙傛暟蹇呴』瓒冲闀匡紙寤鸿 43 瀛楃浠ヤ笂锛夈€?
 ```bash
 curl -s -o /dev/null -w "%{http_code}\n" \
   "https://nihplod.cn/api/oauth/authorize?response_type=code&client_id=skin-advisor&redirect_uri=https://advisor.nihplod.cn/api/auth/callback&scope=openid&state=abcdefghijklmnopqrstuvwxyz1234567890abcdefgh&code_challenge=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&code_challenge_method=S256"
 ```
 
-期望：`302`（跳转登录页或 consent 页）。
-
-### 3. JWKS 端点（如启用 RS256）
-
+鏈熸湜锛歚302`锛堣烦杞櫥褰曢〉鎴?consent 椤碉級銆?
+### 3. JWKS 绔偣锛堝鍚敤 RS256锛?
 ```bash
 curl -s https://nihplod.cn/api/oauth/jwks | jq .
 ```
 
-### 4. 子站登录链路
+### 4. 瀛愮珯鐧诲綍閾捐矾
 
-1. 浏览器访问子站登录入口
-2. 应跳转 `https://nihplod.cn/login?return_to=...`
-3. 登录成功后跳转回子站 `redirect_uri?code=...&state=...`
-4. 子站回调 handler 处理并设置 Cookie
-5. 检查子站 Cookie：`__Host-user_token`（Next.js 回调）或子站自定义 token Cookie
+1. 娴忚鍣ㄨ闂瓙绔欑櫥褰曞叆鍙?2. 搴旇烦杞?`https://nihplod.cn/login?return_to=...`
+3. 鐧诲綍鎴愬姛鍚庤烦杞洖瀛愮珯 `redirect_uri?code=...&state=...`
+4. 瀛愮珯鍥炶皟 handler 澶勭悊骞惰缃?Cookie
+5. 妫€鏌ュ瓙绔?Cookie锛歚__Host-user_token`锛圢ext.js 鍥炶皟锛夋垨瀛愮珯鑷畾涔?token Cookie
 
 ---
 
-## 八、故障排查
+## 鍏€佹晠闅滄帓鏌?
+### 1. `issuer` 杩斿洖 `http://localhost:3000`
 
-### 1. `issuer` 返回 `http://localhost:3000`
-
-原因：Nginx 未透传真实域名/协议，或 Next.js 未信任代理。
-
-检查：
+鍘熷洜锛歂ginx 鏈€忎紶鐪熷疄鍩熷悕/鍗忚锛屾垨 Next.js 鏈俊浠讳唬鐞嗐€?
+妫€鏌ワ細
 
 ```bash
 grep -E "proxy_set_header Host|X-Forwarded-Proto|TRUST_PROXY" \
   /etc/nginx/sites-available/nihplod /var/www/NIHPLOD-Homepage.CN/.env.local
 ```
 
-确保：
+纭繚锛?
+- Nginx 閰嶇疆涓湁 `proxy_set_header Host $host;` 涓?`proxy_set_header X-Forwarded-Proto $scheme;`
+- 瀹樼綉 `.env.local` 涓湁 `TRUST_PROXY=true`
 
-- Nginx 配置中有 `proxy_set_header Host $host;` 与 `proxy_set_header X-Forwarded-Proto $scheme;`
-- 官网 `.env.local` 中有 `TRUST_PROXY=true`
+### 2. SSO 鐧诲綍澶辫触 / 瀛愮珯鎻愮ず "鎺堟潈澶辫触"
 
-### 2. SSO 登录失败 / 子站提示 "授权失败"
-
-1. 检查官网 OAuth Client 是否存在、是否启用、`redirect_uri` 是否精确匹配。
-2. 检查子站环境变量 `NEXT_PUBLIC_SSO_CLIENT_ID`、`NEXT_PUBLIC_SSO_REDIRECT_URI` 是否与官网一致。
-3. 检查 Nginx 是否把 `Host` 头正确传递给官网：
-   ```bash
+1. 妫€鏌ュ畼缃?OAuth Client 鏄惁瀛樺湪銆佹槸鍚﹀惎鐢ㄣ€乣redirect_uri` 鏄惁绮剧‘鍖归厤銆?2. 妫€鏌ュ瓙绔欑幆澧冨彉閲?`NEXT_PUBLIC_SSO_CLIENT_ID`銆乣NEXT_PUBLIC_SSO_REDIRECT_URI` 鏄惁涓庡畼缃戜竴鑷淬€?3. 妫€鏌?Nginx 鏄惁鎶?`Host` 澶存纭紶閫掔粰瀹樼綉锛?   ```bash
    grep -E "proxy_set_header Host|X-Forwarded-Proto" /etc/nginx/sites-available/nihplod
    ```
-4. 查看官网日志：
-   ```bash
+4. 鏌ョ湅瀹樼綉鏃ュ織锛?   ```bash
    pm2 logs nihplod-app --lines 50
    ```
-5. 查看子站回调日志：
-   ```bash
+5. 鏌ョ湅瀛愮珯鍥炶皟鏃ュ織锛?   ```bash
    pm2 logs skin-advisor --lines 50
    ```
 
-### 3. Prisma 迁移冲突（`already exists`）
-
-如果之前在同一数据库上执行过 `npx prisma db push`，后续 `npx prisma migrate deploy` 会报 `column/type/relation ... already exists`。
-
-解决：把冲突的迁移标记为已应用，然后重新 deploy。
-
+### 3. Prisma 杩佺Щ鍐茬獊锛坄already exists`锛?
+濡傛灉涔嬪墠鍦ㄥ悓涓€鏁版嵁搴撲笂鎵ц杩?`npx prisma db push`锛屽悗缁?`npx prisma migrate deploy` 浼氭姤 `column/type/relation ... already exists`銆?
+瑙ｅ喅锛氭妸鍐茬獊鐨勮縼绉绘爣璁颁负宸插簲鐢紝鐒跺悗閲嶆柊 deploy銆?
 ```bash
 cd /var/www/NIHPLOD-Homepage.CN
-npx prisma migrate resolve --applied <冲突的迁移文件名>
+npx prisma migrate resolve --applied <鍐茬獊鐨勮縼绉绘枃浠跺悕>
 npx prisma migrate deploy
 npx prisma generate
 ```
 
-### 4. `.next/prerender-manifest.json` 缺失
+### 4. `.next/prerender-manifest.json` 缂哄け
 
-PM2 启动后报 `ENOENT: .next/prerender-manifest.json`，说明构建产物不完整或 `.next` 目录被清理过。
-
+PM2 鍚姩鍚庢姤 `ENOENT: .next/prerender-manifest.json`锛岃鏄庢瀯寤轰骇鐗╀笉瀹屾暣鎴?`.next` 鐩綍琚竻鐞嗚繃銆?
 ```bash
 cd /var/www/NIHPLOD-Homepage.CN
 npm run build
@@ -1084,19 +964,14 @@ ls -lh .next/prerender-manifest.json
 pm2 restart nihplod-app --update-env
 ```
 
-### 5. 授权端点返回 400 / `state 参数无效或长度不足`
+### 5. 鎺堟潈绔偣杩斿洖 400 / `state 鍙傛暟鏃犳晥鎴栭暱搴︿笉瓒砢
 
-OAuth 2.0 / PKCE 要求 `state` 参数长度足够（建议 43 字符以上）。检查 curl 或 SDK 生成的 `state` 是否被截断。
-
+OAuth 2.0 / PKCE 瑕佹眰 `state` 鍙傛暟闀垮害瓒冲锛堝缓璁?43 瀛楃浠ヤ笂锛夈€傛鏌?curl 鎴?SDK 鐢熸垚鐨?`state` 鏄惁琚埅鏂€?
 ### 6. `OAuthClient.xxx does not exist in the current database`
 
-说明 `schema.prisma` 里有字段但数据库没有。通常因为迁移文件与 schema 不同步。
-
-解决：
-
-1. 确认 `prisma/migrations/` 下是否有对应迁移。
-2. 如果没有，手动创建迁移文件并应用：
-
+璇存槑 `schema.prisma` 閲屾湁瀛楁浣嗘暟鎹簱娌℃湁銆傞€氬父鍥犱负杩佺Щ鏂囦欢涓?schema 涓嶅悓姝ャ€?
+瑙ｅ喅锛?
+1. 纭 `prisma/migrations/` 涓嬫槸鍚︽湁瀵瑰簲杩佺Щ銆?2. 濡傛灉娌℃湁锛屾墜鍔ㄥ垱寤鸿縼绉绘枃浠跺苟搴旂敤锛?
 ```bash
 mkdir -p /var/www/NIHPLOD-Homepage.CN/prisma/migrations/20260729000000_xxx
 cat > /var/www/NIHPLOD-Homepage.CN/prisma/migrations/20260729000000_xxx/migration.sql << 'EOF'
@@ -1106,34 +981,30 @@ sudo -u postgres psql -d nihplod_db -f /var/www/NIHPLOD-Homepage.CN/prisma/migra
 cd /var/www/NIHPLOD-Homepage.CN && npx prisma migrate resolve --applied 20260729000000_xxx
 ```
 
-### 7. 内存不足导致 PM2 重启
+### 7. 鍐呭瓨涓嶈冻瀵艰嚧 PM2 閲嶅惎
 
 ```bash
 pm2 info skin-advisor | grep -A2 "restart"
 ```
 
-### 8. Skin-Advisor 图片 404
+### 8. Skin-Advisor 鍥剧墖 404
 
 ```bash
-# 1. 确认文件是否真实存在
+# 1. 纭鏂囦欢鏄惁鐪熷疄瀛樺湪
 grep "alias" /etc/nginx/sites-available/skin-advisor | grep uploads
 find /var/www/Skin-Advisor/public/uploads -type f | head -10
 
-# 2. 确认 Nginx alias 指向正确（应为 public/uploads/，非 .next/standalone/...）
-# 3. 确认符号链接存在
+# 2. 纭 Nginx alias 鎸囧悜姝ｇ‘锛堝簲涓?public/uploads/锛岄潪 .next/standalone/...锛?# 3. 纭绗﹀彿閾炬帴瀛樺湪
 ls -la /var/www/Skin-Advisor/.next/standalone/public/uploads
 
-# 4. 测试
-curl -I -H "Host: advisor.nihplod.cn" http://127.0.0.1/uploads/products/<文件名>
+# 4. 娴嬭瘯
+curl -I -H "Host: advisor.nihplod.cn" http://127.0.0.1/uploads/products/<鏂囦欢鍚?
 
-# 5. 如果文件缺失但数据库有引用，可能是被 cron 30 天清理误删
-#    展品图应托管于 public/uploads/products/ 子目录
-```
+# 5. 濡傛灉鏂囦欢缂哄け浣嗘暟鎹簱鏈夊紩鐢紝鍙兘鏄 cron 30 澶╂竻鐞嗚鍒?#    灞曞搧鍥惧簲鎵樼浜?public/uploads/products/ 瀛愮洰褰?```
 
-### 9. BA 搜索功能异常
+### 9. BA 鎼滅储鍔熻兘寮傚父
 
-确认 BA 数据库同时执行了：
-
+纭 BA 鏁版嵁搴撳悓鏃舵墽琛屼簡锛?
 ```bash
 npx prisma migrate deploy
 sudo -u postgres psql -d ba_nihplod_db -f /var/www/BA-NIHPLOD/db/schema.sql
@@ -1141,14 +1012,5 @@ sudo -u postgres psql -d ba_nihplod_db -f /var/www/BA-NIHPLOD/db/schema.sql
 
 ---
 
-## 九、生产环境建议
-
-1. **启用 RS256 + JWKS**：在官网运行 `npx tsx scripts/generate-oauth-rs256-keys.ts`，配置 `JWT_ACCESS_PRIVATE_KEY` / `JWT_ACCESS_PUBLIC_KEY` 与 `JWT_ID_TOKEN_PRIVATE_KEY` / `JWT_ID_TOKEN_PUBLIC_KEY`，子站可本地验证 access_token，减少 introspection 网络往返。
-2. **分布式部署必填数据库黑名单**：生产环境务必设置 `RATE_LIMIT_STORAGE=database` 与 `TOKEN_BLACKLIST_STORAGE=database`，确保多实例间共享 token 黑名单与限流状态。
-3. **Redis 黑名单（可选）**：高并发或多实例场景下，可把 access token 撤销和 wechat_exchange 兑换黑名单迁到 Redis。
-4. **HTTPS 全站**：`__Host-` Cookie 和 OAuth 回调都要求 HTTPS。
-5. **Cloudflare 真实 IP**：线上经过 Cloudflare 时，Nginx 必须配置 `set_real_ip_from` 与 `real_ip_header CF-Connecting-IP`。
-6. **密钥轮转**：`SSO_CLIENT_SECRET` 可在官网后台「轮换 Secret」后更新子站 `.env.production` 并重启；JWT 密钥轮转需所有实例同时更新，建议低峰期执行。
-7. **日志监控**：关注官网 `/api/oauth/*` 端点的 `invalid_grant`、`client_id_mismatch`、`invalid_scope` 等错误。
-8. **Scope 最小化**：子站只申请需要的 scope，如商城用 `openid profile phone`，论坛用 `openid profile`。
-9. **Cookie 前缀**：子站 SDK 默认使用 `__Host-` 前缀 Cookie，Nginx 必须传递 `Host` 和 `X-Forwarded-Proto` 头。
+## 涔濄€佺敓浜х幆澧冨缓璁?
+1. **鍚敤 RS256 + JWKS**锛氬湪瀹樼綉杩愯 `npx tsx scripts/generate-oauth-rs256-keys.ts`锛岄厤缃?`JWT_ACCESS_PRIVATE_KEY` / `JWT_ACCESS_PUBLIC_KEY` 涓?`JWT_ID_TOKEN_PRIVATE_KEY` / `JWT_ID_TOKEN_PUBLIC_KEY`锛屽瓙绔欏彲鏈湴楠岃瘉 access_token锛屽噺灏?introspection 缃戠粶寰€杩斻€?2. **鍒嗗竷寮忛儴缃插繀濉暟鎹簱榛戝悕鍗?*锛氱敓浜х幆澧冨姟蹇呰缃?`RATE_LIMIT_STORAGE=database` 涓?`TOKEN_BLACKLIST_STORAGE=database`锛岀‘淇濆瀹炰緥闂村叡浜?token 榛戝悕鍗曚笌闄愭祦鐘舵€併€?3. **Redis 榛戝悕鍗曪紙鍙€夛級**锛氶珮骞跺彂鎴栧瀹炰緥鍦烘櫙涓嬶紝鍙妸 access token 鎾ら攢鍜?wechat_exchange 鍏戞崲榛戝悕鍗曡縼鍒?Redis銆?4. **HTTPS 鍏ㄧ珯**锛歚__Host-` Cookie 鍜?OAuth 鍥炶皟閮借姹?HTTPS銆?5. **Cloudflare 鐪熷疄 IP**锛氱嚎涓婄粡杩?Cloudflare 鏃讹紝Nginx 蹇呴』閰嶇疆 `set_real_ip_from` 涓?`real_ip_header CF-Connecting-IP`銆?6. **瀵嗛挜杞浆**锛歚SSO_CLIENT_SECRET` 鍙湪瀹樼綉鍚庡彴銆岃疆鎹?Secret銆嶅悗鏇存柊瀛愮珯 `.env.production` 骞堕噸鍚紱JWT 瀵嗛挜杞浆闇€鎵€鏈夊疄渚嬪悓鏃舵洿鏂帮紝寤鸿浣庡嘲鏈熸墽琛屻€?7. **鏃ュ織鐩戞帶**锛氬叧娉ㄥ畼缃?`/api/oauth/*` 绔偣鐨?`invalid_grant`銆乣client_id_mismatch`銆乣invalid_scope` 绛夐敊璇€?8. **Scope 鏈€灏忓寲**锛氬瓙绔欏彧鐢宠闇€瑕佺殑 scope锛屽鍟嗗煄鐢?`openid profile phone`锛岃鍧涚敤 `openid profile`銆?9. **Cookie 鍓嶇紑**锛氬瓙绔?SDK 榛樿浣跨敤 `__Host-` 鍓嶇紑 Cookie锛孨ginx 蹇呴』浼犻€?`Host` 鍜?`X-Forwarded-Proto` 澶淬€?
