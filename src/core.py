@@ -290,15 +290,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 continue
 
             if state == 3:
-                # 人工接待中。用户发普通消息→先发提示再结束会话→下次消息AI接管
-                if not any(kw in user_text for kw in transfer_keywords):
-                    _do_send_kf(open_kfid, external_userid, "人工会话已结束，请重新发送您的问题。")
-                    from .wecom.wxkf import transfer_session
-                    transfer_session(
-                        corpid=config.WECOM_CORP_ID, secret=config.WECOM_SECRET,
-                        open_kfid=open_kfid, external_userid=external_userid,
-                        service_state=4,
-                    )
+                # 人工接待中：客户消息由人工客服在工作台处理，机器人不回复、不结束会话、不打断
                 continue
 
             if state in (0, 1):
