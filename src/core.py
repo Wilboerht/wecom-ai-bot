@@ -235,6 +235,17 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
         )
 
         for msg in data.get("msg_list", []):
+            # 事件消息（origin=4）：目前只处理「用户进入会话」事件（测肤报告场景联动）
+            if msg.get("msgtype") == "event":
+                event = msg.get("event") or {}
+                if event.get("event_type") == "enter_session":
+                    # 与文本消息一致做 msgid 去重：sync_msg 每次从头拉取，
+                    # 不去重会随后续回调反复重放该事件（重复拉报告/写档案/发欢迎语）
+                    msg_id = msg.get("msgid", "")
+                    if not msg_id or not store.msgid_is_duplicate(msg_id, open_kfid):
+                        _handle_enter_session_event(open_kfid, event)
+                continue
+
             if msg.get("origin") != 3:
                 continue
 
@@ -347,6 +358,22 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             break
 
 
+def _handle_enter_session_event(open_kfid: str, event: dict) -> None:
+    """enter_session 事件：仅对开启测肤报告联动的客服账号生效"""
+    account = config.get_account(open_kfid)
+    if not account.get("advisor_report"):
+        return
+    external_userid = (event.get("external_userid") or "").strip()
+    if not external_userid:
+        return
+    try:
+        from .advisor_report import handle_enter_session
+
+        handle_enter_session(open_kfid, external_userid, event)
+    except Exception as e:
+        logger.exception("enter_session 处理异常: %s", e)
+
+
 def _pick_agent(external_userid: str, open_kfid: str, candidates: list) -> str:
     """选择转接目标：优先熟人 > 最少接待量均衡。仅1人时直接返回"""
     if not candidates:
@@ -371,8 +398,15 @@ def is_within_service_hours() -> bool:
     return True
 
 
+def _order_transfer_candidates(candidates: list, last: str) -> list:
+    """转接候选顺序：上次服务过的客服优先，其余保持原顺序"""
+    if last and last in candidates:
+        return [last] + [c for c in candidates if c != last]
+    return list(candidates)
+
+
 def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, user_text: str = "") -> None:
-    """先发转接消息，再调 transfer_session 转到人工接待。服务时间外不转人工"""
+    """转人工：依次尝试候选客服，失败自动换下一位；全部失败提示客户。服务时间外不转人工"""
     if not is_within_service_hours():
         _do_send_kf(
             open_kfid, external_userid,
@@ -380,36 +414,57 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
         )
         return
 
-    service_userid = _pick_agent(external_userid, open_kfid, candidates)
-    if service_userid:
-        store.set_last_agent(external_userid, service_userid)
-        # 客户侧只看到转接提示；问题上下文通过企业微信应用消息单独发给客服
-        _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
+    if not candidates:
+        _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
+        return
+
+    from .wecom.wxkf import transfer_session, send_agent_notice
+
+    last = store.get_last_agent(external_userid) if len(candidates) > 1 else ""
+    ordered = _order_transfer_candidates(candidates, last)
+    if not (last and last in candidates):
+        # 无历史客服时按接待量均衡选第一位
+        first = store.transfer_pick_agent(open_kfid, candidates, "")
+        if first and first in ordered:
+            ordered.remove(first)
+            ordered.insert(0, first)
+
+    chosen = ""
+    for agent in ordered:
         try:
-            from .wecom.wxkf import transfer_session
-            transfer_session(
+            ok = transfer_session(
                 corpid=config.WECOM_CORP_ID,
                 secret=config.WECOM_SECRET,
                 open_kfid=open_kfid,
                 external_userid=external_userid,
-                service_userid=service_userid,
+                service_userid=agent,
             )
         except Exception as e:
-            logger.error(f"转接失败: {e}")
-        if user_text:
-            try:
-                from .wecom.wxkf import send_agent_notice
-                send_agent_notice(
-                    corpid=config.WECOM_CORP_ID,
-                    secret=config.WECOM_SECRET,
-                    agent_id=config.WECOM_AGENT_ID,
-                    to_user=service_userid,
-                    content=f"【微信客服转人工】\n客户问题：{user_text.strip()[:200]}",
-                )
-            except Exception as e:
-                logger.error(f"客服通知发送失败: {e}")
-    else:
+            logger.error(f"转接失败 agent={agent}: {e}")
+            ok = False
+        if ok:
+            chosen = agent
+            break
+        logger.warning("转接失败，尝试下一位: agent=%s user=%s", agent, external_userid)
+
+    if not chosen:
         _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
+        return
+
+    store.set_last_agent(external_userid, chosen)
+    # 客户侧只看到转接提示；问题上下文通过企业微信应用消息单独发给客服
+    _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
+    if user_text:
+        try:
+            send_agent_notice(
+                corpid=config.WECOM_CORP_ID,
+                secret=config.WECOM_SECRET,
+                agent_id=config.WECOM_AGENT_ID,
+                to_user=chosen,
+                content=f"【微信客服转人工】\n客户问题：{user_text.strip()[:200]}",
+            )
+        except Exception as e:
+            logger.error(f"客服通知发送失败: {e}")
 
 
 # ---- 订单查询引导流程 ----

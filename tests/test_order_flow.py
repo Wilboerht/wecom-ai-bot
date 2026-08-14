@@ -1,6 +1,30 @@
 """订单查询引导流程 — 解析辅助函数测试"""
 
-from src.core import _extract_order_no, _split_channel_order, _order_triggered, _is_policy_question
+from src.core import (
+    _extract_order_no,
+    _split_channel_order,
+    _order_triggered,
+    _is_policy_question,
+    _order_transfer_candidates,
+)
+
+
+class TestTransferCandidates:
+    def test_last_agent_first(self):
+        assert _order_transfer_candidates(["A", "B"], "B") == ["B", "A"]
+
+    def test_last_agent_not_in_list(self):
+        assert _order_transfer_candidates(["A", "B"], "C") == ["A", "B"]
+
+    def test_no_last_agent(self):
+        assert _order_transfer_candidates(["A", "B"], "") == ["A", "B"]
+
+    def test_single_candidate(self):
+        assert _order_transfer_candidates(["A"], "A") == ["A"]
+        assert _order_transfer_candidates(["A"], "") == ["A"]
+
+    def test_empty(self):
+        assert _order_transfer_candidates([], "A") == []
 
 
 class TestPolicyQuestion:

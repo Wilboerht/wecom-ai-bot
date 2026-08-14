@@ -20,6 +20,8 @@ SEND_MSG_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/send_msg"
 TRANSFER_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/service_state/trans"
 STATE_GET_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/service_state/get"
 APP_MSG_URL = "https://qyapi.weixin.qq.com/cgi-bin/message/send"
+ACCOUNT_LINK_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/add_contact_way"
+SEND_MSG_ON_EVENT_URL = "https://qyapi.weixin.qq.com/cgi-bin/kf/send_msg_on_event"
 
 _client = Client(timeout=10, limits=httpx.Limits(max_keepalive_connections=5, max_connections=20))
 
@@ -173,6 +175,50 @@ def get_session_state(corpid: str, secret: str, open_kfid: str, external_userid:
         logger.error(f"get_session_state 失败: {data}")
         return -1
     return data.get("service_state", 0)
+
+
+def get_account_link(corpid: str, secret: str, open_kfid: str, scene: str = "") -> str:
+    """获取客服账号链接（带场景值），返回的 url 可追加 scene_param=xxx 参数
+
+    注意：返回的链接不允许修改或复制参数到其他链接使用，否则进入会话事件
+    参数校验不通过，无法回调。
+    """
+    access_token = get_access_token(corpid, secret)
+    payload = {"open_kfid": open_kfid}
+    if scene:
+        payload["scene"] = scene
+
+    resp = _client.post(ACCOUNT_LINK_URL, params={"access_token": access_token}, json=payload)
+    data = resp.json()
+
+    if data.get("errcode", 0) != 0:
+        logger.error(f"add_contact_way 失败: {data}")
+        return ""
+    url = data.get("url", "")
+    if not url:
+        logger.error("add_contact_way 返回空 url: %s", data)
+    return url
+
+
+def send_msg_on_event(corpid: str, secret: str, code: str, content: str) -> bool:
+    """发送欢迎语等事件响应消息（enter_session 的 welcome_code 等）"""
+    if not code or not content:
+        return False
+    access_token = get_access_token(corpid, secret)
+
+    payload = {
+        "code": code,
+        "msgtype": "text",
+        "text": {"content": content},
+    }
+
+    resp = _client.post(SEND_MSG_ON_EVENT_URL, params={"access_token": access_token}, json=payload)
+    data = resp.json()
+
+    if data.get("errcode", 0) != 0:
+        logger.error(f"send_msg_on_event 失败: {data}")
+        return False
+    return True
 
 
 def send_agent_notice(corpid: str, secret: str, agent_id: str, to_user: str, content: str) -> bool:

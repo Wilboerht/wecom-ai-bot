@@ -460,6 +460,11 @@ VOLC_SECRETKEY=""
 ADMIN_SECRET="你的强随机密钥"
 IP_HASH_SALT="你的强随机密钥"
 CRON_SECRET="你的强随机密钥"
+
+# ===== 企业微信 AI 客服联动（二期）=====
+# INTERNAL_API_KEY 需与 wecom-ai-bot 的 .env 保持一致（openssl rand -hex 24 生成）
+INTERNAL_API_KEY="<与客服服务一致的强随机密钥>"
+WECOM_BOT_BASE_URL="https://kf.nihplod.cn"
 EOF
 ```
 
@@ -658,6 +663,14 @@ SYSTEM_PROMPT=你是NIHPLOD旎柏的客服顾问。保持专业、尊重、简�
 SESSION_TTL=1800
 LOG_LEVEL=INFO
 WECOM_SERVICE_USERID=WangHongKun
+
+# ===== 测肤报告联动（二期：结果页 → 客服链接 scene_param → 自动拉取报告写档案）=====
+# INTERNAL_API_KEY 需与 Skin-Advisor 子站 .env.production 保持一致（openssl rand -hex 24 生成）
+INTERNAL_API_KEY=<与子站一致的强随机密钥>
+ADVISOR_REPORT_API_URL=https://advisor.nihplod.cn/api/internal/report-summary
+KF_ADVISOR_OPEN_KFID=kfc7834894b7ee2b86a
+KF_SCENE=advisor
+KF_SEND_WELCOME=1
 EOF
 ```
 
@@ -709,6 +722,17 @@ server {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
+    }
+
+    # 内部 API（advisor 子站服务端调用生成客服链接，带 x-internal-key 校验）
+    location /api/ {
+        proxy_pass http://127.0.0.1:8080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 15s;
     }
 
     location / {

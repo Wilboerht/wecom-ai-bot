@@ -44,6 +44,16 @@ class Config:
         self.SERVICE_START_HOUR = self._require_int("SERVICE_START_HOUR", 10)
         self.SERVICE_END_HOUR = self._require_int("SERVICE_END_HOUR", 20)
 
+        # 测肤报告联动（enter_session → scene_param → 拉取报告写档案）
+        self.INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+        self.ADVISOR_REPORT_API_URL = os.getenv(
+            "ADVISOR_REPORT_API_URL",
+            "https://advisor.nihplod.cn/api/internal/report-summary",
+        )
+        self.KF_ADVISOR_OPEN_KFID = os.getenv("KF_ADVISOR_OPEN_KFID", "")
+        self.KF_SCENE = os.getenv("KF_SCENE", "advisor")
+        self.KF_SEND_WELCOME = os.getenv("KF_SEND_WELCOME", "1") == "1"
+
         self._accounts = {}
         self._load_accounts()
 
