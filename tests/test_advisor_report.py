@@ -29,6 +29,29 @@ FAKE_REPORT = {
     ],
 }
 
+# 扩展后的 report-summary 响应（skin-advisor 侧 2026-08 起新增字段）
+FAKE_EXTENDED_REPORT = {
+    **FAKE_REPORT,
+    "dimensions": [
+        {"key": "waterOil", "label": "水油平衡", "score": 65},
+        {"key": "firmness", "label": "皮肤弹性", "score": 90},
+        {"key": "radiance", "label": "光泽度", "score": 58},
+    ],
+    "dataSource": "comprehensive",
+    "questionnaire": {
+        "ageRange": "26-30岁",
+        "primaryConcerns": ["细纹/松弛", "色斑/暗沉"],
+        "allergies": ["香精过敏", "酒精过敏"],
+        "pregnancy": "是",
+        "medicalBeauty": "光子/激光类",
+        "sleepQuality": "较差（经常熬夜/失眠）",
+        "stressLevel": "很大（焦虑/紧绷）",
+        "menstrualCycle": "黄体期（经前一周）",
+        "skincareFrequency": "每天精细护肤",
+        "budget": "中等预算（单品300-1000元）",
+    },
+}
+
 
 class TestBuildProfileFields:
     def test_full_report(self):
@@ -48,6 +71,57 @@ class TestBuildProfileFields:
 
     def test_empty_report(self):
         assert advisor_report.build_profile_fields({"found": True}) == {}
+
+    def test_extended_report_questionnaire_fields(self):
+        fields = advisor_report.build_profile_fields(FAKE_EXTENDED_REPORT)
+        assert fields["年龄段"] == "26-30岁"
+        assert fields["关注问题"] == "细纹/松弛、色斑/暗沉"
+        assert fields["过敏史"] == "⚠️香精过敏、酒精过敏"
+        assert fields["孕期状态"] == "⚠️是"
+        assert fields["医美经历(近3月)"] == "光子/激光类"
+        assert fields["睡眠质量"] == "较差（经常熬夜/失眠）"
+        assert fields["压力水平"] == "很大（焦虑/紧绷）"
+        assert fields["生理周期"] == "黄体期（经前一周）"
+        assert fields["护肤习惯"] == "每天精细护肤"
+        assert fields["护肤预算"] == "中等预算（单品300-1000元）"
+
+    def test_extended_report_dimensions_and_source(self):
+        fields = advisor_report.build_profile_fields(FAKE_EXTENDED_REPORT)
+        assert fields["各维度评分"] == "水油平衡65分、皮肤弹性90分、光泽度58分"
+        assert fields["测肤方式"] == "问卷+面部扫描"
+
+    def test_safe_values_no_warning_marks(self):
+        report = {
+            "found": True,
+            "questionnaire": {
+                "allergies": ["无过敏史"],
+                "pregnancy": "否",
+                "medicalBeauty": "无",
+                "menstrualCycle": "不适用",
+            },
+        }
+        fields = advisor_report.build_profile_fields(report)
+        assert fields["过敏史"] == "无过敏史"
+        assert "孕期状态" not in fields
+        assert "医美经历(近3月)" not in fields
+        assert "生理周期" not in fields
+        assert not any("⚠️" in v for v in fields.values())
+
+    def test_concerns_fallback_when_no_issues(self):
+        fields = advisor_report.build_profile_fields(
+            {"found": True, "concerns": ["T区出油", "毛孔粗大"], "dataSource": "questionnaire"}
+        )
+        assert fields["重点问题"] == "T区出油、毛孔粗大"
+        assert fields["测肤方式"] == "仅问卷"
+
+    def test_issues_take_priority_over_concerns(self):
+        report = {
+            "found": True,
+            "issues": [{"label": "色斑状况", "score": 55}],
+            "concerns": ["T区出油"],
+        }
+        fields = advisor_report.build_profile_fields(report)
+        assert fields["重点问题"] == "色斑状况（55分）"
 
 
 class TestBuildWelcomeText:

@@ -50,7 +50,12 @@ def _fetch_report(session_id: str) -> dict | None:
 
 
 def build_profile_fields(report: dict) -> dict:
-    """报告摘要 → 用户护肤档案字段（与 AI 顾问档案标签一致：肤质/性别/年龄/诉求等）"""
+    """报告摘要 → 用户护肤档案字段（与 AI 顾问档案标签一致：肤质/性别/年龄/诉求等）
+
+    兼容扩展后的 report-summary 响应：questionnaire（问卷档案，上游已标签化为
+    中文文本，此处只做透传与拼接）、dimensions（完整十维）、concerns（AI 分析
+    关注点，作为 issues 为空时的兜底）、dataSource（测肤方式）。
+    """
     fields = {}
     if report.get("skinTypeLabel"):
         fields["肤质"] = str(report["skinTypeLabel"])
@@ -79,6 +84,67 @@ def build_profile_fields(report: dict) -> dict:
                 parts.append(label)
         if parts:
             fields["重点问题"] = "、".join(parts)
+    elif report.get("concerns"):
+        # 纯问卷模式没有维度评分，用 AI 分析得出的关注点兜底
+        concerns = [str(c) for c in report["concerns"] if c]
+        if concerns:
+            fields["重点问题"] = "、".join(concerns)
+
+    dimensions = report.get("dimensions") or []
+    dim_parts = []
+    for item in dimensions:
+        label = (item or {}).get("label") or ""
+        item_score = (item or {}).get("score")
+        if label and isinstance(item_score, (int, float)):
+            dim_parts.append(f"{label}{int(item_score)}分")
+    if dim_parts:
+        fields["各维度评分"] = "、".join(dim_parts)
+
+    data_source = report.get("dataSource")
+    if data_source:
+        source_labels = {
+            "comprehensive": "问卷+面部扫描",
+            "questionnaire": "仅问卷",
+            "hybrid": "问卷+部分扫描",
+        }
+        fields["测肤方式"] = source_labels.get(str(data_source), str(data_source))
+
+    q = report.get("questionnaire") or {}
+    if isinstance(q, dict):
+        if q.get("ageRange"):
+            fields["年龄段"] = str(q["ageRange"])
+        primary = [str(c) for c in (q.get("primaryConcerns") or []) if c]
+        if primary:
+            fields["关注问题"] = "、".join(primary)
+
+        # 安全相关字段：过敏史 / 孕期状态直接影响产品成分推荐，加 ⚠️ 让 AI 优先注意
+        allergies = [str(a) for a in (q.get("allergies") or []) if a]
+        if allergies:
+            text = "、".join(allergies)
+            fields["过敏史"] = text if allergies == ["无过敏史"] else f"⚠️{text}"
+        pregnancy = q.get("pregnancy")
+        if pregnancy and pregnancy != "否":
+            fields["孕期状态"] = f"⚠️{pregnancy}"
+
+        medical = q.get("medicalBeauty")
+        if medical and medical != "无":
+            fields["医美经历(近3月)"] = str(medical)
+
+        lifestyle_map = [
+            ("sleepQuality", "睡眠质量"),
+            ("stressLevel", "压力水平"),
+            ("menstrualCycle", "生理周期"),
+            ("waterIntake", "饮水习惯"),
+            ("exerciseFrequency", "运动频率"),
+            ("dietaryHabits", "饮食习惯"),
+            ("sunExposure", "日晒程度"),
+            ("skincareFrequency", "护肤习惯"),
+            ("budget", "护肤预算"),
+        ]
+        for key, label in lifestyle_map:
+            value = q.get(key)
+            if value and value != "不适用":
+                fields[label] = str(value)
     # 注意：不写「报告ID」等内部字段——档案会注入 AI 系统提示词，内部标识对模型是噪音
     return fields
 
