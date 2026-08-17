@@ -21,6 +21,17 @@ SCENE_PARAM_RE = re.compile(r"^[0-9A-Za-z\-]{8,128}$")
 
 _TIMEOUT = 5.0
 
+# 由测肤报告管理的档案字段（build_profile_fields 可能产生的全部 key）。
+# 新报告到达时先清理这些 key 再写入，防止第二次测肤后旧报告的字段残留
+#（如第一次有过敏史、第二次未作答，旧 ⚠️ 过敏史不应继续留在档案里）。
+# 用户聊天中 AI 通过 [档案: ...] 标记积累的其他字段不受影响。
+REPORT_MANAGED_KEYS = [
+    "肤质", "性别", "肌肤年龄", "素颜评分", "重点问题", "各维度评分", "测肤方式",
+    "年龄段", "关注问题", "过敏史", "孕期状态", "医美经历(近3月)",
+    "睡眠质量", "压力水平", "生理周期", "饮水习惯", "运动频率",
+    "饮食习惯", "日晒程度", "护肤习惯", "护肤预算",
+]
+
 
 def _fetch_report(session_id: str) -> dict | None:
     """调 skin-advisor 内部接口拉取报告摘要，失败返回 None"""
@@ -178,6 +189,9 @@ def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> N
     if not fields:
         return
 
+    # 先清理报告管理的旧字段再合并：同一用户第二次测肤时，旧报告中存在而
+    # 新报告缺失的字段（过敏史/重点问题等）不应残留
+    store.profile_delete_keys(open_kfid, external_userid, REPORT_MANAGED_KEYS)
     store.profile_update(open_kfid, external_userid, fields)
     logger.info("Report profile saved: user=%s session=%s fields=%s", external_userid, scene_param, list(fields))
 

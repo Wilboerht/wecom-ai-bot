@@ -256,6 +256,24 @@ def profile_update(open_kfid: str, external_userid: str, fields: dict) -> None:
         r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
 
 
+def profile_delete_keys(open_kfid: str, external_userid: str, keys: list) -> None:
+    """删除用户护肤档案中的指定字段（用于新报告到达前清理报告管理的旧字段，防止残留过期信息）"""
+    if not keys:
+        return
+    r = _get_redis()
+    if r:
+        current = profile_get(open_kfid, external_userid)
+        if not current:
+            return
+        changed = False
+        for k in keys:
+            if k in current:
+                current.pop(k)
+                changed = True
+        if changed:
+            r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
+
+
 # ---- 通用键值存储（短流程状态机） ----
 _inmem_kv: dict[str, str] = {}
 

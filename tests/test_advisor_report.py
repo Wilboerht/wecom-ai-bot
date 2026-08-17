@@ -208,6 +208,33 @@ class TestHandleEnterSession:
         )
         assert saved == []
 
+    def test_second_report_clears_stale_managed_keys(self, monkeypatch):
+        """第二次测肤：新报告到达前先清理报告管理的旧字段，防止旧过敏史等残留"""
+        deleted = []
+        saved = {}
+        monkeypatch.setattr(
+            "src.advisor_report.store.profile_delete_keys",
+            lambda open_kfid, user, keys: deleted.append(keys),
+        )
+        monkeypatch.setattr(
+            "src.advisor_report.store.profile_update",
+            lambda open_kfid, user, fields: saved.update(fields),
+        )
+        monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: FAKE_EXTENDED_REPORT)
+        monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
+        monkeypatch.setattr(config, "ADVISOR_REPORT_API_URL", "https://x")
+        monkeypatch.setattr(config, "KF_SEND_WELCOME", False)
+
+        advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_user_1",
+            {"scene_param": "sess-1234567890"},
+        )
+
+        assert deleted == [advisor_report.REPORT_MANAGED_KEYS]
+        # 报告管理的全部字段都在清理清单里
+        for key in saved:
+            assert key in advisor_report.REPORT_MANAGED_KEYS
+
 
 class TestKfLinkEndpoint:
     @pytest.mark.asyncio
