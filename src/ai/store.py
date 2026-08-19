@@ -237,6 +237,16 @@ def set_last_agent(external_userid: str, service_userid: str) -> None:
 # ---- 用户护肤档案（长期记忆） ----
 _PROFILE_PREFIX = "profile:"
 
+_profile_no_redis_warned = False
+
+
+def _warn_profile_no_redis() -> None:
+    """Redis 不可用时档案功能静默失效——打一次告警日志，避免刷屏"""
+    global _profile_no_redis_warned
+    if not _profile_no_redis_warned:
+        _profile_no_redis_warned = True
+        logger.warning("Redis 未配置或不可用，用户档案功能已停用（写入将被丢弃）。请配置 REDIS_URL 启用。")
+
 
 def profile_get(open_kfid: str, external_userid: str) -> dict:
     """获取用户护肤档案"""
@@ -244,6 +254,7 @@ def profile_get(open_kfid: str, external_userid: str) -> dict:
     if r:
         data = r.get(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}")
         return json.loads(data) if data else {}
+    _warn_profile_no_redis()
     return {}
 
 
@@ -254,6 +265,9 @@ def profile_update(open_kfid: str, external_userid: str, fields: dict) -> None:
         current = profile_get(open_kfid, external_userid)
         current.update(fields)
         r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
+        return
+    _warn_profile_no_redis()
+    logger.warning("档案写入被丢弃: user=%s fields=%s", external_userid, list(fields))
 
 
 def profile_delete_keys(open_kfid: str, external_userid: str, keys: list) -> None:

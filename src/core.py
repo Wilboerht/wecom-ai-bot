@@ -1,7 +1,7 @@
 """
-公共业务逻辑 — src/main.py (FastAPI) 和 dist/main.py (SCF) 共享
+公共业务逻辑 — 消息处理的核心入口
 
-所有核心处理逻辑在此模块中，入口文件只负责路由和 HTTP 适配。
+所有核心处理逻辑在此模块中，src/main.py (FastAPI) 只负责路由和 HTTP 适配。
 """
 import json
 import logging
@@ -539,8 +539,8 @@ def _strip_markdown(text: str) -> str:
 
 
 def _save_profile_from_reply(open_kfid: str, external_userid: str, reply: str) -> str:
-    """从AI回复中提取[档案: key=value, ...]标记，存入Redis，返回清理后的文本"""
-    match = re.search(r'\[档案[:：]\s*([^\]]+)\]', reply)
+    """从AI回复中提取[档案: key=value, ...]标记（兼容全角【档案：…】），存入Redis，返回清理后的文本"""
+    match = re.search(r'[\[【]档案[:：]\s*([^\]】]+)[\]】]', reply)
     if match:
         fields_str = match.group(1)
         fields = {}

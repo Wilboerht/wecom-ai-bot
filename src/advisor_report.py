@@ -217,6 +217,19 @@ def build_welcome_text(report: dict) -> str:
     return "\n".join(lines)
 
 
+# 补发去重标记 TTL：7 天（远长于测肤会话的有效期，同一份报告不会重复补发）
+_WELCOME_FALLBACK_TTL = 7 * 24 * 3600
+
+
+def _welcome_fallback_marked(open_kfid: str, external_userid: str, scene_param: str) -> bool:
+    """同一份报告（scene_param）只补发一次欢迎语；首次调用写入标记并返回 False"""
+    key = f"welcome-fallback:{open_kfid}:{external_userid}:{scene_param}"
+    if store.kv_get(key):
+        return True
+    store.kv_set(key, "1", _WELCOME_FALLBACK_TTL)
+    return False
+
+
 def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> None:
     """进入会话事件：拉取报告写档案，可选发欢迎语"""
     scene_param = (event.get("scene_param") or "").strip()
@@ -237,7 +250,10 @@ def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> N
     store.profile_update(open_kfid, external_userid, fields)
     logger.info("Report profile saved: user=%s session=%s fields=%s", external_userid, scene_param, list(fields))
 
-    # 欢迎语：仅在微信判定满足条件（48h 内未收过欢迎语且未发过消息）时才有 welcome_code
+    # 欢迎语：优先用 welcome_code（微信事件响应消息，仅 48h 内未收过欢迎语且
+    # 用户未发过消息时才下发）。无 welcome_code 时退化为普通 send_msg 补发——
+    # 仅当用户在 48h 会话窗口内（之前发过消息）才能送达，送达失败属平台限制，不重试。
+    # 同一份报告（scene_param）只补发一次，避免用户重复点链接被刷屏。
     if config.KF_SEND_WELCOME:
         welcome_code = (event.get("welcome_code") or "").strip()
         if welcome_code:
@@ -254,3 +270,19 @@ def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> N
                     logger.info("Welcome sent: user=%s", external_userid)
             except Exception as e:
                 logger.warning("Welcome 发送失败: %s", e)
+        elif not _welcome_fallback_marked(open_kfid, external_userid, scene_param):
+            try:
+                from .wecom.wxkf import send_message
+
+                ok = send_message(
+                    corpid=config.WECOM_CORP_ID,
+                    secret=config.WECOM_SECRET,
+                    to_user=external_userid,
+                    open_kfid=open_kfid,
+                    msgtype="text",
+                    content=build_welcome_text(report),
+                )
+                if ok:
+                    logger.info("Welcome fallback sent: user=%s session=%s", external_userid, scene_param)
+            except Exception as e:
+                logger.warning("Welcome 补发失败: %s", e)

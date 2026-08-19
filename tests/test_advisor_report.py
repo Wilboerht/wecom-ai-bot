@@ -264,6 +264,90 @@ class TestHandleEnterSession:
             assert key in advisor_report.REPORT_MANAGED_KEYS
 
 
+class TestWelcomeFallback:
+    """无 welcome_code 时退化为普通 send_msg 补发，同一份报告只补发一次"""
+
+    def _setup(self, monkeypatch, sent):
+        monkeypatch.setattr("src.advisor_report.store.profile_update", lambda a, b, c: None)
+        monkeypatch.setattr("src.advisor_report.store.profile_delete_keys", lambda a, b, c: None)
+        # 补发去重标记用本地 dict 隔离，避免污染/依赖真实 Redis
+        local_kv: dict[str, str] = {}
+        monkeypatch.setattr(
+            "src.advisor_report.store.kv_get", lambda key: local_kv.get(key, "")
+        )
+        monkeypatch.setattr(
+            "src.advisor_report.store.kv_set",
+            lambda key, value, ttl=600: local_kv.__setitem__(key, value),
+        )
+        monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: FAKE_REPORT)
+        monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
+        monkeypatch.setattr(config, "ADVISOR_REPORT_API_URL", "https://x")
+        monkeypatch.setattr(config, "KF_SEND_WELCOME", True)
+
+        def fake_send(corpid, secret, to_user, open_kfid, msgtype, content, msgid=""):
+            sent.append({"to_user": to_user, "open_kfid": open_kfid, "content": content})
+            return True
+
+        monkeypatch.setattr("src.wecom.wxkf.send_message", fake_send)
+
+    def test_fallback_sent_when_no_welcome_code(self, monkeypatch):
+        sent = []
+        self._setup(monkeypatch, sent)
+
+        advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_fallback_1",
+            {"scene_param": "sess-fb-0001"},
+        )
+
+        assert len(sent) == 1
+        assert sent[0]["to_user"] == "wm_fallback_1"
+        assert "小雨" in sent[0]["content"]
+
+    def test_fallback_not_resent_for_same_scene(self, monkeypatch):
+        sent = []
+        self._setup(monkeypatch, sent)
+
+        for _ in range(3):
+            advisor_report.handle_enter_session(
+                "kfc7834894b7ee2b86a", "wm_fallback_2",
+                {"scene_param": "sess-fb-0002"},
+            )
+
+        assert len(sent) == 1
+
+    def test_fallback_resent_for_new_scene(self, monkeypatch):
+        sent = []
+        self._setup(monkeypatch, sent)
+
+        advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_fallback_3",
+            {"scene_param": "sess-fb-0003a"},
+        )
+        advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_fallback_3",
+            {"scene_param": "sess-fb-0003b"},
+        )
+
+        assert len(sent) == 2
+
+    def test_welcome_code_takes_priority_over_fallback(self, monkeypatch):
+        sent = []
+        on_event = []
+        self._setup(monkeypatch, sent)
+        monkeypatch.setattr(
+            "src.wecom.wxkf.send_msg_on_event",
+            lambda corpid, secret, code, content: on_event.append(code) or True,
+        )
+
+        advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_fallback_4",
+            {"scene_param": "sess-fb-0004", "welcome_code": "wcode-9"},
+        )
+
+        assert on_event == ["wcode-9"]
+        assert sent == []
+
+
 class TestKfLinkEndpoint:
     @pytest.mark.asyncio
     async def test_requires_internal_key(self, client, monkeypatch):
