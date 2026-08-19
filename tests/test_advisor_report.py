@@ -1,6 +1,8 @@
 """测肤报告联动（enter_session → 档案写入 → 客服链接）测试"""
 
 import pytest
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from httpx import ASGITransport, AsyncClient
 
 from src import advisor_report
@@ -127,9 +129,35 @@ class TestBuildProfileFields:
 class TestBuildWelcomeText:
     def test_welcome_text(self):
         text = advisor_report.build_welcome_text(FAKE_REPORT)
-        assert "测肤报告" in text
-        assert "混干性肌肤" in text
-        assert "82分" in text
+        assert "尊敬的小雨女士您好" in text
+        assert "性别：女" in text
+        # FAKE_REPORT 无问卷字段，对应行显示「暂未填写」
+        assert "年龄段：暂未填写" in text
+        assert "请确认上述信息" in text
+
+    def test_welcome_text_with_questionnaire(self):
+        text = advisor_report.build_welcome_text(FAKE_EXTENDED_REPORT)
+        assert "年龄段：26-30岁" in text
+        assert "关注问题：细纹/松弛、色斑/暗沉" in text
+        assert "医美经历（近3月）：光子/激光类" in text
+        assert "护肤习惯：每天精细护肤" in text
+
+    def test_welcome_text_without_nickname(self):
+        text = advisor_report.build_welcome_text({"found": True, "gender": "male"})
+        assert "尊敬的先生您好" in text
+
+    def test_welcome_text_uses_report_created_at(self):
+        # 接口返回 createdAt 时按它显示测肤日期（UTC 转中国时区）
+        text = advisor_report.build_welcome_text(
+            {**FAKE_REPORT, "createdAt": "2026-08-01T02:00:00.000Z"}
+        )
+        assert "最近一次的肌智派测肤时间: 2026年08月01日" in text
+
+    def test_welcome_text_created_at_fallback(self):
+        # 旧版接口无 createdAt 时兜底为当天日期
+        text = advisor_report.build_welcome_text(FAKE_REPORT)
+        today = datetime.now(ZoneInfo("Asia/Shanghai"))
+        assert f"{today.year}年{today.month:02d}月{today.day:02d}日" in text
 
 
 class TestHandleEnterSession:
@@ -175,7 +203,7 @@ class TestHandleEnterSession:
         )
 
         assert sent["code"] == "wcode-1"
-        assert "混干性肌肤" in sent["content"]
+        assert "小雨" in sent["content"]
 
     def test_invalid_scene_param_ignored(self, monkeypatch):
         monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: FAKE_REPORT)

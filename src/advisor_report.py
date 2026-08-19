@@ -8,6 +8,8 @@
 """
 import logging
 import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -160,18 +162,58 @@ def build_profile_fields(report: dict) -> dict:
     return fields
 
 
+def _report_date(report: dict) -> datetime:
+    """测肤时间：优先用接口返回的 createdAt（ISO 8601），缺失时兜底为当前时间（中国时区）"""
+    raw = report.get("createdAt")
+    if isinstance(raw, str):
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(
+                ZoneInfo("Asia/Shanghai")
+            )
+        except ValueError:
+            pass
+    return datetime.now(ZoneInfo("Asia/Shanghai"))
+
+
 def build_welcome_text(report: dict) -> str:
-    """个性化欢迎语（纯文本、符合护肤顾问语气规范）"""
-    lines = ["您好呀，我看到您刚在肌智派完成了测肤报告"]
-    parts = []
-    if report.get("skinTypeLabel"):
-        parts.append(f"肤质：{report['skinTypeLabel']}")
-    score = report.get("overallScore")
-    if isinstance(score, (int, float)):
-        parts.append(f"素颜评分：{int(score)}分")
-    if parts:
-        lines.append("，".join(parts))
-    lines.append("我已记下您的报告，接下来可以直接告诉我您最想改善的肌肤问题，或对报告里任何一项提问哦。")
+    """个性化欢迎语（纯文本、符合护肤顾问语气规范）
+
+    用户刚从测肤结果页点进来，欢迎语确认问卷收集到的基础信息；
+    测肤时间优先用接口返回的 createdAt，旧版接口没有该字段时兜底为当天日期。
+    问卷字段缺失时显示「暂未填写」，引导用户补充。
+    """
+    nickname = str(report.get("nickname") or "").strip()
+    gender = report.get("gender")
+    title = {"male": "先生", "female": "女士"}.get(gender, "")
+    if nickname:
+        name = f"{nickname}{title}"
+    else:
+        name = title or "顾客"
+
+    q = report.get("questionnaire")
+    if not isinstance(q, dict):
+        q = {}
+
+    def _q(key: str) -> str:
+        value = q.get(key)
+        return str(value) if value else "暂未填写"
+
+    concerns = [str(c) for c in (q.get("primaryConcerns") or []) if c]
+    gender_label = {"male": "男", "female": "女"}.get(gender, "暂未填写")
+    tested_at = _report_date(report)
+
+    lines = [
+        f"尊敬的{name}您好, 我是你的专属顾问NIHPLOD肌智派护肤顾问, 很高兴成为您的专属护肤顾问, 为了将来给您带来更好的服务体验, 想和您确认以下的基础信息:",
+        "",
+        f"性别：{gender_label}",
+        f"年龄段：{_q('ageRange')}",
+        f"关注问题：{'、'.join(concerns) if concerns else '暂未填写'}",
+        f"医美经历（近3月）：{_q('medicalBeauty')}",
+        f"护肤习惯：{_q('skincareFrequency')}",
+        f"最近一次的肌智派测肤时间: {tested_at.year}年{tested_at.month:02d}月{tested_at.day:02d}日",
+        "",
+        "请确认上述信息，如果需要调整，请马上告诉我哦~",
+    ]
     return "\n".join(lines)
 
 
