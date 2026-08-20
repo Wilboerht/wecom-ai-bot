@@ -42,12 +42,12 @@
       "must_not_contain": []
     },
     {
-      "id": "cs-skincare-cross-guide",
+      "id": "cs-skincare-no-cross-guide",
       "role": "brand_cs",
       "account": "kfcb074403c752c0645",
       "user": "我脸上长痘了怎么办",
-      "must_contain": ["护肤顾问", "kfc7834894b7ee2b86a"],
-      "must_not_contain": []
+      "must_contain": [],
+      "must_not_contain": ["护肤顾问", "kfc7834894b7ee2b86a"]
     },
     {
       "id": "cs-competitor",
