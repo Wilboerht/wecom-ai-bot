@@ -5,12 +5,14 @@
 """
 import json
 import logging
+import os
 import re
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from .config import config
+from .compliance import sanitize_reply
 from .wecom.crypto import WXBizMsgCrypt, SignatureError, DecryptError
 from .wecom.handler import (
     parse_encrypted_xml,
@@ -26,30 +28,65 @@ from .links import shorten_text, load_links
 
 logger = logging.getLogger(__name__)
 
-# cache_key -> (知识库内容, 系统提示词)；知识库热加载后内容变化即重建
-_account_prompts: dict[str, tuple[str, str]] = {}
+# cache_key -> (知识库内容, 基础 prompt, 拼接结果)；知识库或 prompt 文件热加载变化即重建
+_account_prompts: dict[str, tuple[str, str, str]] = {}
+
+
+# ---- 外部 prompt 文件（mtime 热加载）----
+# filepath -> (文件 mtime, prompt 文本)；文件缺失时 mtime 记 None，只警告一次
+_prompt_file_cache: dict[str, tuple[float | None, str]] = {}
+
+
+def load_prompt_file(filepath: str) -> str:
+    """加载外部 prompt 文件（按 mtime 热加载）；缺失记一次警告返回空串，由调用方兜底"""
+    if not os.path.exists(filepath):
+        cached = _prompt_file_cache.get(filepath)
+        if cached and cached[0] is None:
+            return cached[1]
+        logger.warning("prompt 文件未找到: %s，回退内联 system_prompt/默认提示词", filepath)
+        _prompt_file_cache[filepath] = (None, "")
+        return ""
+    mtime = os.path.getmtime(filepath)
+    cached = _prompt_file_cache.get(filepath)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            text = f.read().strip()
+    except OSError as e:
+        if cached:
+            logger.error("prompt 文件读取失败: %s（沿用旧缓存）", e)
+            return cached[1]
+        logger.error("prompt 文件读取失败: %s（无缓存，回退默认提示词）", e)
+        return ""
+    _prompt_file_cache[filepath] = (mtime, text)
+    logger.info("prompt 文件加载完成 [%s]: %d 字符", filepath, len(text))
+    return text
 
 
 # ---- 系统提示词 ----
 def get_system_prompt(open_kfid: str = "") -> str:
     """获取指定客服账号的系统提示词（含知识库）
 
-    每次调用都经 load_knowledge 热加载（内部按 mtime 缓存，开销可忽略），
-    知识库内容变化时重建 prompt，文件不变时命中 (知识库内容, prompt) 缓存
+    prompt 优先级：system_prompt_file 外部文件（热加载）> 内联 system_prompt > 默认。
+    每次调用都经 load_knowledge/load_prompt_file 热加载（内部按 mtime 缓存，开销可忽略），
+    任一内容变化时重建 prompt，均不变时命中缓存
     """
     account = config.get_account(open_kfid)
-    prompt = account.get("system_prompt", "") or config.SYSTEM_PROMPT
+    prompt_file = (account.get("system_prompt_file") or "").strip()
+    base_prompt = load_prompt_file(prompt_file) if prompt_file else ""
+    prompt = base_prompt or account.get("system_prompt", "") or config.SYSTEM_PROMPT
     knowledge_file = account.get("knowledge_file", "knowledge.txt")
 
     cache_key = f"{open_kfid}:{knowledge_file}"
     knowledge = load_knowledge(knowledge_file) if knowledge_file else ""
 
     cached = _account_prompts.get(cache_key)
-    if cached and cached[0] == knowledge:
-        return cached[1]
+    if cached and cached[0] == knowledge and cached[1] == prompt:
+        return cached[2]
 
     result = prompt + "\n\n" + knowledge if knowledge else prompt
-    _account_prompts[cache_key] = (knowledge, result)
+    _account_prompts[cache_key] = (knowledge, prompt, result)
     return result
 
 
@@ -96,6 +133,11 @@ def process_message(message) -> str | None:
             if claim_key:
                 store.msgid_release(claim_key)
             return "AI服务暂时不可用，请稍后再试。"
+
+        # 广告法禁语后置兜底：命中替换为合规表述
+        reply, banned_hits = sanitize_reply(reply)
+        if banned_hits:
+            logger.warning("命中广告法禁语已替换: user=%s words=%s", user_id, banned_hits)
 
         store.session_add(user_id, "user", user_text)
         store.session_add(user_id, "assistant", reply)
@@ -226,6 +268,10 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
     def _handle_order_inquiry(euid: str, user_text: str) -> bool:
         """订单查询两步引导：先问购买渠道，再问订单号，收集齐转人工。返回 True 表示已处理"""
+        # 账号级门控：仅开启 order_flow 的账号（品牌客服）进入流程；
+        # 护肤顾问等账号的订单类问题由其 prompt 引导至品牌人工客服，不走本流程
+        if not account.get("order_flow"):
+            return False
         key = _order_flow_key(open_kfid, euid)
         info = store.kv_get(key)
         if info:
@@ -421,7 +467,13 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                     _transferred_in_batch.add(external_userid)
                 return
 
-            # 原始回复（含档案标记）写入历史，与既往上下文格式保持一致
+            # 广告法禁语后置兜底：命中替换为合规表述（在提取档案/写历史之前，
+            # 让历史记录与档案值同样是合规文本）
+            reply, banned_hits = sanitize_reply(reply)
+            if banned_hits:
+                logger.warning("命中广告法禁语已替换: user=%s words=%s", external_userid, banned_hits)
+
+            # 清洗后的回复（含档案标签）写入历史，与既往上下文格式保持一致
             history_reply = reply
 
             # 提取并保存用户档案

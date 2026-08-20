@@ -443,3 +443,41 @@ class TestOrderFlowProcess:
         assert len(transfers) == 1
         assert "购买渠道：小红书" in transfers[0]
         assert store.kv_get(self._flow_key(euid))
+
+
+class TestOrderFlowAccountGate:
+    """订单查询流程按账号门控：仅 order_flow=true 的账号（品牌客服）进入流程；
+    护肤顾问账号的订单类问题交给 AI（由其 prompt 引导至品牌人工客服）"""
+
+    SK_KFID = "kfc7834894b7ee2b86a"
+
+    def test_advisor_account_skips_order_flow(self, monkeypatch):
+        sent = []
+        calls = {"n": 0}
+
+        def fake_chat(messages):
+            calls["n"] += 1
+            return "售后问题麻烦您联系品牌人工客服处理哦~"
+
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr("src.core.chat", fake_chat)
+        _patch_sync(monkeypatch, [_text_msg("m-of-gate-1", content="查订单", euid="u-of-gate")])
+
+        process_kf_messages("t1", self.SK_KFID)
+
+        # 未进入订单流程：不问购买渠道，直接走 AI
+        assert not any("哪个平台购买" in s for s in sent)
+        assert calls["n"] == 1
+        assert sent == ["售后问题麻烦您联系品牌人工客服处理哦~"]
+        assert store.kv_get(f"orderflow:{self.SK_KFID}:u-of-gate") == ""
+
+    def test_brand_account_enters_order_flow(self, monkeypatch):
+        sent = []
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr("src.core.chat", lambda messages: "AI回复")
+        _patch_sync(monkeypatch, [_text_msg("m-of-gate-2", content="查订单", euid="u-of-gate-b")])
+
+        process_kf_messages("t1", KFID)
+
+        assert any("哪个平台购买" in s for s in sent)
+        assert store.kv_get(f"orderflow:{KFID}:u-of-gate-b")

@@ -114,11 +114,24 @@ class Config:
             # _default 是未匹配时的兜底配置（可能只有 welcome），跳过必填字段校验
             if open_kfid == "_default":
                 continue
-            for field in ("welcome", "system_prompt", "knowledge_file"):
+            for field in ("welcome", "knowledge_file"):
                 if not account.get(field):
                     raise ConfigError(
                         f"客服账号配置文件 {path} 中账号 {open_kfid} 缺少必填字段: {field}"
                     )
+            # 提示词二选一：外部文件（推荐，多账号共用+热加载）或内联 system_prompt
+            if not (account.get("system_prompt") or account.get("system_prompt_file")):
+                raise ConfigError(
+                    f"客服账号配置文件 {path} 中账号 {open_kfid} 缺少必填字段: "
+                    "system_prompt 或 system_prompt_file"
+                )
+            prompt_file = account.get("system_prompt_file")
+            if prompt_file and not os.path.exists(prompt_file):
+                # 不阻断：运行期会回退内联/默认提示词并记警告
+                logger.warning(
+                    "%s 中账号 %s 的 system_prompt_file 不存在: %s",
+                    path, open_kfid, prompt_file,
+                )
             knowledge_file = account["knowledge_file"]
             if not os.path.exists(knowledge_file):
                 # 不阻断：多账号配置里可能有暂未启用的账号
