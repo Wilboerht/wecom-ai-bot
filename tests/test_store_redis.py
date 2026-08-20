@@ -4,6 +4,7 @@ conftest 的 autouse fixture 强制 _get_redis → None（其他测试依赖内�
 本模块用自己的 fixture 在其之后重新注入 fakeredis 客户端，覆盖 Redis 分支。
 """
 
+import logging
 import time
 
 import fakeredis
@@ -101,6 +102,52 @@ class TestRedisDownFallback:
         monkeypatch.setattr(fake_redis, "get", boom)
         store.kv_set("kerr", "verr", ttl=60)  # 写入降级内存
         assert store.kv_get("kerr") == "verr"
+
+
+class TestProfileRobustness:
+    """档案上限、脏数据容错与报告字段原子替换"""
+
+    def test_max_keys_drops_new_but_updates_existing(self, fake_redis, caplog):
+        # 先塞满 50 个 key
+        store.profile_update("kf1", "cap1", {f"key{i:02d}": "v" for i in range(store.PROFILE_MAX_KEYS)})
+        assert len(store.profile_get("kf1", "cap1")) == store.PROFILE_MAX_KEYS
+        # 已有 key 可更新，新增 key 被丢弃并记 warning
+        with caplog.at_level(logging.WARNING, logger="src.ai.store"):
+            store.profile_update("kf1", "cap1", {"key00": "updated", "new_key": "nope"})
+        profile = store.profile_get("kf1", "cap1")
+        assert profile["key00"] == "updated"
+        assert "new_key" not in profile
+        assert len(profile) == store.PROFILE_MAX_KEYS
+        assert any("超上限" in r.getMessage() for r in caplog.records)
+
+    def test_corrupted_json_returns_empty_without_redis_down(self, fake_redis, monkeypatch, caplog):
+        down_calls = []
+        monkeypatch.setattr(store, "_redis_down", lambda e: down_calls.append(e))
+        fake_redis.set(f"{store._PROFILE_PREFIX}kf1:bad1", "{not-json")
+        with caplog.at_level(logging.ERROR, logger="src.ai.store"):
+            assert store.profile_get("kf1", "bad1") == {}
+        assert down_calls == []  # 脏数据不触发全局降级
+        assert fake_redis.get(f"{store._PROFILE_PREFIX}kf1:bad1") is None  # 坏 key 已被清除
+        assert any("JSON 损坏" in r.getMessage() for r in caplog.records)
+
+    def test_corrupted_json_then_update_recovers(self, fake_redis, monkeypatch):
+        monkeypatch.setattr(store, "_redis_down", lambda e: (_ for _ in ()).throw(AssertionError("不应降级")))
+        fake_redis.set(f"{store._PROFILE_PREFIX}kf1:bad2", "}{")
+        store.profile_update("kf1", "bad2", {"肤质": "干性"})
+        assert store.profile_get("kf1", "bad2") == {"肤质": "干性"}
+
+    def test_replace_report_keys_single_set(self, fake_redis, monkeypatch):
+        """删旧增新一步到位：一次 read→合并→单次 SET"""
+        set_calls = []
+        orig_set = fake_redis.set
+        monkeypatch.setattr(fake_redis, "set", lambda *a, **kw: (set_calls.append(a), orig_set(*a, **kw))[1])
+        store.profile_update("kf1", "rep1", {"过敏史": "花粉", "肤质": "油性", "诉求": "祛痘"})
+        set_calls.clear()
+
+        store.profile_replace_report_keys("kf1", "rep1", ["过敏史", "肤质"], {"肤质": "干性"})
+
+        assert len(set_calls) == 1
+        assert store.profile_get("kf1", "rep1") == {"肤质": "干性", "诉求": "祛痘"}
 
 
 class TestPiiExportDeleteRedis:

@@ -313,6 +313,7 @@ def set_last_agent(external_userid: str, service_userid: str) -> None:
 
 # ---- 用户护肤档案（长期记忆） ----
 _PROFILE_PREFIX = "profile:"
+PROFILE_MAX_KEYS = 50  # 档案字段数量上限：超出后丢弃新增 key，防 prompt 成本膨胀
 
 _profile_no_redis_warned = False
 
@@ -326,24 +327,45 @@ def _warn_profile_no_redis() -> None:
 
 
 def profile_get(open_kfid: str, external_userid: str) -> dict:
-    """获取用户护肤档案"""
+    """获取用户护肤档案；JSON 损坏时清掉坏 key 并返回 {}（不触发全局降级）"""
     r = _get_redis()
     if r:
+        key = f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}"
         try:
-            data = r.get(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}")
-            return json.loads(data) if data else {}
+            data = r.get(key)
         except Exception as e:
             _redis_down(e)
+        else:
+            if not data:
+                return {}
+            try:
+                return json.loads(data)
+            except json.JSONDecodeError as e:
+                # 脏数据不属 Redis 故障：记 error、顺手 DEL 坏 key、返回空档案
+                logger.error("档案 JSON 损坏已清除: user=%s err=%s", external_userid, e)
+                try:
+                    r.delete(key)
+                except Exception as del_err:
+                    _redis_down(del_err)
+                return {}
     _warn_profile_no_redis()
     return {}
 
 
 def profile_update(open_kfid: str, external_userid: str, fields: dict) -> None:
-    """更新用户护肤档案，合并新字段"""
+    """更新用户护肤档案，合并新字段；key 总数超 PROFILE_MAX_KEYS 时保留已有 key 的更新、丢弃新增 key"""
     r = _get_redis()
     if r:
         try:
             current = profile_get(open_kfid, external_userid)
+            new_keys = [k for k in fields if k not in current]
+            if len(current) + len(new_keys) > PROFILE_MAX_KEYS:
+                keep = max(0, PROFILE_MAX_KEYS - len(current))
+                dropped = new_keys[keep:]
+                logger.warning("档案字段数量超上限(%d)，丢弃新增字段: user=%s keys=%s",
+                               PROFILE_MAX_KEYS, external_userid, dropped)
+                kept = set(new_keys[:keep])
+                fields = {k: v for k, v in fields.items() if k in current or k in kept}
             current.update(fields)
             r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
             return
@@ -372,6 +394,28 @@ def profile_delete_keys(open_kfid: str, external_userid: str, keys: list) -> Non
                 r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
         except Exception as e:
             _redis_down(e)
+
+
+def profile_replace_report_keys(open_kfid: str, external_userid: str, delete_keys: list, fields: dict) -> None:
+    """测肤报告字段原子替换：一次 read→合并（先删 delete_keys 再并入 fields）→单次 SET。
+
+    替代 profile_delete_keys + profile_update 两步调用，消除两步之间崩溃导致
+    旧字段被清、新字段未写的中间窗口；Redis 与内存模式语义一致（内存模式丢弃写入）。
+    注意：read-modify-write 本身存在并发竞态（报告到达频率极低，本次可接受），未做加锁。
+    """
+    r = _get_redis()
+    if r:
+        try:
+            current = profile_get(open_kfid, external_userid)
+            for k in delete_keys:
+                current.pop(k, None)
+            current.update(fields)
+            r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
+            return
+        except Exception as e:
+            _redis_down(e)
+    _warn_profile_no_redis()
+    logger.warning("档案写入被丢弃: user=%s fields=%s", external_userid, list(fields))
 
 
 # ---- 通用键值存储（短流程状态机） ----

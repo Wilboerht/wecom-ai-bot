@@ -349,9 +349,16 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             if profile:
                 parts = []
                 for k, v in profile.items():
-                    # 档案值来自 AI 回复的 [档案:...] 标签（间接注入面）：
-                    # 拼进 prompt 前去换行并截断，防止伪造 system 指令
+                    # 档案 key/value 来自 AI 回复的 [档案:...] 标签（间接注入面）：
+                    # 拼进 prompt 前 key 做白名单校验、value 去换行并截断，防止伪造 system 指令。
+                    # 防御纵深：即使 Redis 里已残留脏 key 也不会进入 prompt
+                    k = str(k).strip()
+                    if not _PROFILE_KEY_RE.match(k):
+                        logger.warning("档案 key 非法已跳过: user=%s key=%r", external_userid, k)
+                        continue
                     v = " ".join(str(v).split())[:100]
+                    if not v:
+                        continue
                     parts.append(f"{k}: {v}")
                 profile_text = "【该用户的护肤档案】" + "；".join(parts) + "。依据档案个性化推荐，如档案信息变化请在回复末尾建议更新。"
 
@@ -626,23 +633,41 @@ def _strip_markdown(text: str) -> str:
     return text.strip()
 
 
+# 档案字段 key 白名单：仅中英文、数字、下划线，最长 20 字符（防注入伪造 system 指令）
+_PROFILE_KEY_RE = re.compile(r'^[\w一-龥]{1,20}$')
+# 完整闭合的档案标记（兼容全角【档案：…】）
+_PROFILE_TAG_RE = re.compile(r'[\[【]档案[:：]\s*([^\]】]+)[\]】]')
+# 行尾/文末残留的未闭合档案标记片段（如被 max_tokens 截断的 "[档案: 肤质=干性"）。
+# 只匹配以档案标记开头、无闭合括号、直到行尾的片段（字符类排除换行，不会跨行误删正常文本）
+_PROFILE_TAG_TAIL_RE = re.compile(r'[\[【]档案[:：][^\]】\n]*$', re.MULTILINE)
+
+
 def _save_profile_from_reply(open_kfid: str, external_userid: str, reply: str) -> str:
-    """从AI回复中提取[档案: key=value, ...]标记（兼容全角【档案：…】），存入Redis，返回清理后的文本"""
-    match = re.search(r'[\[【]档案[:：]\s*([^\]】]+)[\]】]', reply)
-    if match:
-        fields_str = match.group(1)
-        fields = {}
-        for part in re.split(r'[,;，；]', fields_str):
+    """从AI回复中提取所有[档案: key=value, ...]标记（兼容全角【档案：…】），合并存入Redis，
+    返回清理后的文本（含剥除未闭合的尾部标记片段，保证档案语法任何情况下都不到达用户）"""
+    fields = {}
+
+    def _collect(match: re.Match) -> str:
+        for part in re.split(r'[,;，；]', match.group(1)):
             pair = part.split('=', 1)
-            if len(pair) == 2:
-                fields[pair[0].strip()] = pair[1].strip()
-        if fields:
-            store.profile_update(open_kfid, external_userid, fields)
-            logger.info("Profile saved: user=%s fields=%s", external_userid, list(fields))
-        # 从回复中移除档案标记，不显示给用户
-        reply = reply[:match.start()] + reply[match.end():]
-        reply = reply.strip()
-    return reply
+            if len(pair) != 2:
+                continue
+            k, v = pair[0].strip(), pair[1].strip()
+            if not k or not v:
+                continue
+            if not _PROFILE_KEY_RE.match(k):
+                logger.warning("档案字段 key 非法已丢弃: user=%s key=%r", external_userid, k)
+                continue
+            fields[k] = v[:100]
+        return ""  # 从回复中移除档案标记，不显示给用户
+
+    reply = _PROFILE_TAG_RE.sub(_collect, reply)
+    # 剥掉残留的未闭合标记片段（如被 max_tokens 截断）
+    reply = _PROFILE_TAG_TAIL_RE.sub("", reply)
+    if fields:
+        store.profile_update(open_kfid, external_userid, fields)
+        logger.info("Profile saved: user=%s fields=%s", external_userid, list(fields))
+    return reply.strip()
 
 
 def _do_send_kf(open_kfid: str, to_user: str, content: str, msgid: str = "") -> bool:

@@ -182,8 +182,8 @@ class TestHandleEnterSession:
     def test_saves_profile_and_skips_welcome(self, monkeypatch):
         saved = {}
         monkeypatch.setattr(
-            "src.advisor_report.store.profile_update",
-            lambda open_kfid, user, fields: saved.update({(open_kfid, user): fields}),
+            "src.advisor_report.store.profile_replace_report_keys",
+            lambda open_kfid, user, delete_keys, fields: saved.update({(open_kfid, user): fields}),
         )
         monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: FAKE_REPORT)
         monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
@@ -201,7 +201,7 @@ class TestHandleEnterSession:
     def test_sends_welcome_when_code_present(self, monkeypatch):
         sent = {}
         monkeypatch.setattr(
-            "src.advisor_report.store.profile_update", lambda a, b, c: None
+            "src.advisor_report.store.profile_replace_report_keys", lambda a, b, c, d: None
         )
         monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: FAKE_REPORT)
         monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
@@ -236,7 +236,7 @@ class TestHandleEnterSession:
     def test_report_not_found_does_not_save(self, monkeypatch):
         saved = []
         monkeypatch.setattr(
-            "src.advisor_report.store.profile_update", lambda a, b, c: saved.append(1)
+            "src.advisor_report.store.profile_replace_report_keys", lambda a, b, c, d: saved.append(1)
         )
         monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: None)
         monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
@@ -249,16 +249,12 @@ class TestHandleEnterSession:
         assert saved == []
 
     def test_second_report_clears_stale_managed_keys(self, monkeypatch):
-        """第二次测肤：新报告到达前先清理报告管理的旧字段，防止旧过敏史等残留"""
+        """第二次测肤：删旧 key 与写新字段通过单次原子替换完成，防止旧过敏史等残留"""
         deleted = []
         saved = {}
         monkeypatch.setattr(
-            "src.advisor_report.store.profile_delete_keys",
-            lambda open_kfid, user, keys: deleted.append(keys),
-        )
-        monkeypatch.setattr(
-            "src.advisor_report.store.profile_update",
-            lambda open_kfid, user, fields: saved.update(fields),
+            "src.advisor_report.store.profile_replace_report_keys",
+            lambda open_kfid, user, keys, fields: (deleted.append(keys), saved.update(fields)),
         )
         monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: FAKE_EXTENDED_REPORT)
         monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
@@ -280,8 +276,7 @@ class TestWelcomeFallback:
     """无 welcome_code 时退化为普通 send_msg 补发，同一份报告只补发一次"""
 
     def _setup(self, monkeypatch, sent):
-        monkeypatch.setattr("src.advisor_report.store.profile_update", lambda a, b, c: None)
-        monkeypatch.setattr("src.advisor_report.store.profile_delete_keys", lambda a, b, c: None)
+        monkeypatch.setattr("src.advisor_report.store.profile_replace_report_keys", lambda a, b, c, d: None)
         # 补发去重标记用本地 dict 隔离，避免污染/依赖真实 Redis
         local_kv: dict[str, str] = {}
         monkeypatch.setattr(

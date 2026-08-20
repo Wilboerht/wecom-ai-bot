@@ -273,10 +273,9 @@ def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> N
     if not fields:
         return
 
-    # 先清理报告管理的旧字段再合并：同一用户第二次测肤时，旧报告中存在而
-    # 新报告缺失的字段（过敏史/重点问题等）不应残留
-    store.profile_delete_keys(open_kfid, external_userid, REPORT_MANAGED_KEYS)
-    store.profile_update(open_kfid, external_userid, fields)
+    # 先清理报告管理的旧字段再合并（单次 SET 原子完成）：同一用户第二次测肤时，
+    # 旧报告中存在而新报告缺失的字段（过敏史/重点问题等）不应残留
+    store.profile_replace_report_keys(open_kfid, external_userid, REPORT_MANAGED_KEYS, fields)
     logger.info("Report profile saved: user=%s session=%s fields=%s", external_userid, _mask_session(scene_param), list(fields))
 
     # 欢迎语：优先用 welcome_code（微信事件响应消息，仅 48h 内未收过欢迎语且
