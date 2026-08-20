@@ -28,6 +28,14 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("case", _CASES, ids=[c["id"] for c in _CASES])
 def test_golden_case(case):
     system_content = build_system_content(case["account"], case["user"], [])
+    # 可选档案预置：与生产链路同格式拼入 system（验证回访衔接/随访兑现/报告依据）
+    profile = case.get("profile")
+    if profile:
+        parts = [f"{k}: {v}" for k, v in profile.items()]
+        system_content += (
+            "【该用户的护肤档案】" + "；".join(parts)
+            + "。依据档案个性化推荐，如档案信息变化请在回复末尾建议更新。"
+        )
     messages = [
         {"role": "system", "content": system_content},
         {"role": "user", "content": wrap_user_text(case["user"])},

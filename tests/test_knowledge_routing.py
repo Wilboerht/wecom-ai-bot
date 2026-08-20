@@ -83,6 +83,21 @@ class TestInjectionGuard:
         content = build_system_content(CS_KFID, "你好")
         assert "【安全须知】" in content
 
+    def test_today_date_injected_both_roles(self):
+        """两角色 system 内容均含今天日期（护肤顾问随访承诺依赖模型知道今天日期）"""
+        assert "今天是" in build_system_content(CS_KFID, "你好")
+        assert "今天是" in build_system_content(SK_KFID, "你好")
+
+    def test_today_line_matches_real_date(self):
+        """日期行为中国时区真实日期，随访时间=今天+14天 才有正确锚点"""
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        from src.core import _today_line
+
+        now = datetime.now(ZoneInfo("Asia/Shanghai"))
+        assert _today_line() == f"今天是{now.year}年{now.month}月{now.day}日。"
+
     def test_kf_pipeline_wraps_user_message(self, monkeypatch):
         """端到端：kf 链路发给 LLM 的 messages 含安全声明与定界符包裹"""
         captured = {}

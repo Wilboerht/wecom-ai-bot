@@ -131,6 +131,12 @@ _USER_MSG_OPEN = "【客户消息开始】"
 _USER_MSG_CLOSE = "【客户消息结束】"
 
 
+def _today_line() -> str:
+    """今天日期（中国时区）：护肤顾问随访承诺（随访时间=今天+2周）依赖模型知道今天日期"""
+    now = datetime.now(ZoneInfo("Asia/Shanghai"))
+    return f"今天是{now.year}年{now.month}月{now.day}日。"
+
+
 def wrap_user_text(text: str) -> str:
     """用定界符包裹用户原文；先剔除文本内的定界符串，防止用户消息逃逸伪装边界"""
     clean = text.replace(_USER_MSG_OPEN, "").replace(_USER_MSG_CLOSE, "")
@@ -164,6 +170,7 @@ def build_system_content(open_kfid: str, user_text: str = "", history: list | No
     parts = [prompt]
     if knowledge:
         parts.append(knowledge)
+    parts.append(_today_line())
     parts.append(_INJECTION_NOTE)
     return "\n\n".join(parts)
 
@@ -174,6 +181,12 @@ def check_rate_limit(user_id: str, send_time: int = 0) -> bool:
 
 
 # ---- 普通消息处理（企微/公众号被动回复） ----
+# 微信被动回复要求 5s 内返回响应，否则放弃等待并重试；重推又被 msgid 去重拒掉，
+# 慢响应会导致用户完全收不到回复。因此公众号路径给 AI 4.5s 预算且不重试：
+# 超时也保证 5s 内返回兜底文案（微信收到响应即视为成功，不会重推）
+_WX_AI_TIMEOUT = 4.5
+
+
 def process_message(message) -> str | None:
     if isinstance(message, EventMessage):
         event = message.event.lower()
@@ -202,16 +215,19 @@ def process_message(message) -> str | None:
 
         user_id = message.from_user
         history = store.session_get(user_id)
-        # 注入防护：system 声明 + 用户消息定界符包裹
-        messages = [{"role": "system", "content": get_system_prompt() + "\n\n" + _INJECTION_NOTE}]
+        # 注入防护：system 声明 + 用户消息定界符包裹；今天日期供随访承诺计算
+        messages = [{"role": "system", "content": get_system_prompt() + "\n\n" + _today_line() + "\n\n" + _INJECTION_NOTE}]
         messages.extend(history)
         messages.append({"role": "user", "content": wrap_user_text(user_text)})
 
         try:
-            reply = chat(messages)
-        except AIServiceError:
+            reply = chat(messages, timeout=_WX_AI_TIMEOUT, max_retries=0)
+        except AIServiceError as e:
             # 兜底文案不写入历史（避免污染上下文）；回滚认领允许重推后重试
             metrics.inc(metrics.AI_FAILURE)
+            if "timeout" in str(e).lower():
+                metrics.inc(metrics.WX_BUDGET_TIMEOUT)
+                logger.warning("公众号 AI 超出 %.1fs 预算返回兜底: user=%s", _WX_AI_TIMEOUT, user_id)
             if claim_key:
                 store.msgid_release(claim_key)
             return "AI服务暂时不可用，请稍后再试。"

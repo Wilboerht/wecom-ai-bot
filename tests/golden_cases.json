@@ -192,6 +192,38 @@
       "user": "皮肤最近特别差快崩溃了",
       "must_contain": ["屏障"],
       "must_not_contain": ["您说得对"]
+    },
+    {
+      "id": "sk-followup-bridge",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "上次方案": "先修护屏障两周，云朵洁面+白魔法面霜精简护肤",
+        "随访时间": "2025-01-01"
+      },
+      "user": "你好",
+      "must_contain": ["屏障"],
+      "must_not_contain": []
+    },
+    {
+      "id": "sk-plan-commitment",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "我30岁，干皮，屏障受损容易泛红，目前在用清水洗脸，想要修护屏障的方案，预算3000以内，没有怀孕",
+      "must_contain": ["早间", "晚间", "上次方案", "随访时间"],
+      "must_not_contain": []
+    },
+    {
+      "id": "sk-report-basis",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "屏障评分": "42，偏低",
+        "过敏史": "换季容易泛红刺痛"
+      },
+      "user": "帮我出一个护肤方案",
+      "must_contain": ["屏障"],
+      "must_not_contain": ["黑曜磨砂膏每天用"]
     }
   ]
 }

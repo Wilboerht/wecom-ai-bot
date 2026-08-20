@@ -188,7 +188,7 @@ class TestPrivacyNotice:
 class TestProcessMessage:
     def test_ai_failure_not_written_to_history(self, monkeypatch):
         """AI 失败兜底文案不写入历史；回滚认领允许重推后重试"""
-        def boom(messages):
+        def boom(messages, **kw):
             raise core.AIServiceError("boom")
 
         monkeypatch.setattr("src.core.chat", boom)
@@ -205,7 +205,7 @@ class TestProcessMessage:
         """微信 5s 超时重推：同 MsgId 不重复调 AI、不重复写历史"""
         calls = {"n": 0}
 
-        def fake_chat(messages):
+        def fake_chat(messages, **kw):
             calls["n"] += 1
             return "你好！"
 
@@ -216,6 +216,39 @@ class TestProcessMessage:
         assert process_message(msg) is None
         assert calls["n"] == 1
         assert len(store.session_get("wx-u-dup")) == 2
+
+    def test_wx_ai_budget_args(self, monkeypatch):
+        """公众号路径调 AI 带 5s 内预算：短 timeout + 不重试，避免慢响应静默丢回复"""
+        captured = {}
+
+        def fake_chat(messages, timeout=28.0, max_retries=2):
+            captured["timeout"] = timeout
+            captured["max_retries"] = max_retries
+            return "你好！"
+
+        monkeypatch.setattr("src.core.chat", fake_chat)
+        msg = TextMessage(from_user="wx-u-budget", content="你好", msg_id="wxmsg-budget-1")
+
+        assert process_message(msg) == "你好！"
+        assert captured["timeout"] < 5
+        assert captured["max_retries"] == 0
+
+    def test_wx_budget_timeout_fallback_and_metric(self, monkeypatch):
+        """AI 超出预算（timeout 类失败）：返回兜底文案、不写历史、计 wx_budget_timeout"""
+        from src import metrics
+
+        before = metrics.snapshot()
+
+        def boom(messages, timeout=28.0, max_retries=2):
+            raise core.AIServiceError("timeout")
+
+        monkeypatch.setattr("src.core.chat", boom)
+        msg = TextMessage(from_user="wx-u-bto", content="你好", msg_id="wxmsg-bto-1")
+
+        assert process_message(msg) == "AI服务暂时不可用，请稍后再试。"
+        assert store.session_get("wx-u-bto") == []
+        assert metrics.snapshot().get(metrics.WX_BUDGET_TIMEOUT, 0) \
+            - before.get(metrics.WX_BUDGET_TIMEOUT, 0) == 1
 
 
 class TestTransferKeywords:
@@ -660,7 +693,7 @@ class TestMetricsInstrumentation:
         from src import metrics
 
         before = metrics.snapshot()
-        monkeypatch.setattr("src.core.chat", lambda messages: "你好！")
+        monkeypatch.setattr("src.core.chat", lambda messages, **kw: "你好！")
         msg = TextMessage(from_user="wx-u-mt", content="你好", msg_id="wxmsg-mt-1")
 
         assert process_message(msg) == "你好！"

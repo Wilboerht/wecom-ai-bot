@@ -31,11 +31,13 @@ class AIServiceError(Exception):
     pass
 
 
-def chat(messages: list[dict], timeout: float = 28.0) -> str:
+def chat(messages: list[dict], timeout: float = 28.0, max_retries: int = 2) -> str:
     """调用 DeepSeek API 进行对话
 
-    对 HTTP 429、5xx、超时/网络异常最多重试 2 次（指数退避 1s、3s），
+    对 HTTP 429、5xx、超时/网络异常最多重试 max_retries 次（指数退避 1s、3s），
     重试耗尽才抛 AIServiceError；4xx（非 429）不重试。
+    公众号被动回复等硬时限场景用 max_retries=0 + 短 timeout，
+    保证总耗时可控（退避 sleep 会超出平台响应时限）。
 
     Raises:
         AIServiceError: AI 服务不可用时抛出，调用方应转人工处理
@@ -52,10 +54,11 @@ def chat(messages: list[dict], timeout: float = 28.0) -> str:
         "temperature": 0.6,
     }
 
-    max_attempts = len(_RETRY_BACKOFF) + 1
+    backoffs = _RETRY_BACKOFF[:max(0, max_retries)]
+    max_attempts = len(backoffs) + 1
     for attempt in range(max_attempts):
         if attempt > 0:
-            backoff = _RETRY_BACKOFF[attempt - 1]
+            backoff = backoffs[attempt - 1]
             logger.warning("DeepSeek API 第 %d 次重试（%ds 退避后）", attempt, backoff)
             time.sleep(backoff)
         try:

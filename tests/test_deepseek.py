@@ -90,6 +90,22 @@ class TestDeepSeekChat:
             assert reply == "重试后的回复"
             assert mock_get_client.return_value.post.call_count == 2
 
+    def test_chat_max_retries_zero_no_retry(self):
+        """公众号 5s 预算场景：max_retries=0 时超时/5xx 只调一次不重试"""
+        from httpx import TimeoutException
+        from src.ai.deepseek import chat, AIServiceError
+
+        with patch("src.ai.deepseek._get_client") as mock_get_client:
+            mock_get_client.return_value.post.side_effect = (
+                TimeoutException("timeout")
+            )
+
+            with pytest.raises(AIServiceError):
+                chat([{"role": "user", "content": "test"}], timeout=4.5, max_retries=0)
+            assert mock_get_client.return_value.post.call_count == 1
+            # timeout 参数透传给 httpx
+            assert mock_get_client.return_value.post.call_args.kwargs["timeout"] == 4.5
+
 
 class TestSessionManager:
     def test_get_context_empty(self):
