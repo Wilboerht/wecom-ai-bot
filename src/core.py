@@ -124,11 +124,20 @@ def handle_callback(body: str, query: dict, crypto: WXBizMsgCrypt) -> dict:
         logger.error(f"解密失败: {e}")
         return {"reply_xml": None}
 
-    message = parse_message_xml(plain_xml)
+    # 解密后的明文解析并入 try：明文畸形（上游 bug 或 key 泄露才能构造）时留定位日志而非中间件笼统兜底
+    try:
+        message = parse_message_xml(plain_xml)
+    except Exception as e:
+        logger.error(f"解密后明文 XML 解析失败: {e}")
+        return {"reply_xml": None}
 
     # 微信客服事件 — 异步处理
     if isinstance(message, EventMessage) and message.event == "kf_msg_or_event":
-        root = ET.fromstring(plain_xml)
+        try:
+            root = ET.fromstring(plain_xml)
+        except Exception as e:
+            logger.error(f"kf 事件 XML 二次解析失败: {e}")
+            return {"reply_xml": None}
         token = root.findtext("Token", "")
         open_kfid = root.findtext("OpenKfId", "")
         if token and open_kfid:
@@ -365,10 +374,10 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             # AI 可处理
             if transfer_hit:
                 logger.info("KF transfer triggered: user=%s text_len=%d", external_userid, len(user_text))
-                _transferred_in_batch.add(external_userid)
                 ctx = _merge_flow_context(external_userid, user_text)
-                # 转接成功才清理订单流程上下文；失败保留，稍后可重试
+                # 转接成功才打标记并清理订单流程上下文；失败保留，本批次后续消息也不应被静默丢弃
                 if _handle_kf_transfer(open_kfid, external_userid, candidates, ctx):
+                    _transferred_in_batch.add(external_userid)
                     store.kv_delete(_order_flow_key(open_kfid, external_userid))
                 return
 
@@ -406,10 +415,10 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             try:
                 reply = chat(messages)
             except AIServiceError:
-                # AI 失败：回滚认领允许重推后重试，同时转人工兜底
+                # AI 失败：回滚认领允许重推后重试，同时转人工兜底；转接成功才打批次标记
                 store.msgid_release(msg_id)
-                _transferred_in_batch.add(external_userid)
-                _handle_kf_transfer(open_kfid, external_userid, candidates)
+                if _handle_kf_transfer(open_kfid, external_userid, candidates):
+                    _transferred_in_batch.add(external_userid)
                 return
 
             # 原始回复（含档案标记）写入历史，与既往上下文格式保持一致

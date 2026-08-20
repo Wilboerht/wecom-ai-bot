@@ -123,7 +123,10 @@ async def advisor_kf_link(
     x_internal_key: str = Header("", alias="x-internal-key"),
 ):
     """生成带 scene_param 的护肤顾问客服链接（x-internal-key 校验，仅供服务端间调用）"""
-    if not config.INTERNAL_API_KEY or not hmac.compare_digest(x_internal_key, config.INTERNAL_API_KEY):
+    # encode 为 bytes 再比较：非 ASCII 的 key 直接 compare_digest(str) 会抛 TypeError 被中间件吞成空 200
+    if not config.INTERNAL_API_KEY or not hmac.compare_digest(
+        x_internal_key.encode("utf-8", "ignore"), config.INTERNAL_API_KEY.encode()
+    ):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
 
     if not re.fullmatch(r"[0-9A-Za-z\-]{8,128}", session_id):
@@ -150,7 +153,10 @@ _PII_ID_RE = re.compile(r"[0-9A-Za-z_\-]{1,128}")
 
 def _pii_check(open_kfid: str, external_userid: str, x_internal_key: str):
     """PII 管理端点公共校验：鉴权 + 参数白名单。通过返回 None，否则返回错误响应"""
-    if not config.INTERNAL_API_KEY or not hmac.compare_digest(x_internal_key, config.INTERNAL_API_KEY):
+    # 同 /api/kf-link：encode 防非 ASCII key 抛 TypeError
+    if not config.INTERNAL_API_KEY or not hmac.compare_digest(
+        x_internal_key.encode("utf-8", "ignore"), config.INTERNAL_API_KEY.encode()
+    ):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     if not _PII_ID_RE.fullmatch(open_kfid) or not _PII_ID_RE.fullmatch(external_userid):
         return JSONResponse({"error": "invalid open_kfid or external_userid"}, status_code=400)
@@ -216,7 +222,8 @@ async def verify_url(
 async def handle_callback_route(request: Request, background_tasks: BackgroundTasks):
     body = await request.body()
     query = dict(request.query_params)
-    return _route(body.decode("utf-8"), query, crypto_wecom, background_tasks)
+    # 与 /wx-callback 同理：企微应用普通消息（非 kf 事件）的被动回复会同步调 AI，移入线程池
+    return await run_in_threadpool(_route, body.decode("utf-8"), query, crypto_wecom, background_tasks)
 
 
 @app.get("/wx-callback")

@@ -17,8 +17,9 @@ import re
 
 logger = logging.getLogger(__name__)
 
-# filepath -> (文件 mtime, 格式化后的知识文本)；文件缺失时 mtime 记 None 表示空知识库
-_knowledge_cache: dict[str, tuple[float, str]] = {}
+# filepath -> (文件指纹 (mtime, size), 格式化后的知识文本)；文件缺失时指纹记 None 表示空知识库
+# 双指纹防止"编辑器同秒两段写入"时截断的非空内容以相同 mtime 覆盖完整版缓存
+_knowledge_cache: dict[str, tuple[tuple[float, int] | None, str]] = {}
 
 
 def load_knowledge(filepath: str = "knowledge.txt") -> str:
@@ -37,10 +38,11 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
         _knowledge_cache[filepath] = (None, "")
         return ""
 
-    # 热加载: mtime 未变直接返回缓存, 变了则重新解析
-    mtime = os.path.getmtime(filepath)
+    # 热加载: 指纹 (mtime, size) 未变直接返回缓存, 变了则重新解析
+    st = os.stat(filepath)
+    fingerprint = (st.st_mtime, st.st_size)
     cached = _knowledge_cache.get(filepath)
-    if cached and cached[0] == mtime:
+    if cached and cached[0] == fingerprint:
         return cached[1]
 
     entries = []
@@ -118,6 +120,6 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
         lines.append(f"   答: {a}")
 
     text = "\n".join(lines)
-    _knowledge_cache[filepath] = (mtime, text)
+    _knowledge_cache[filepath] = (fingerprint, text)
     logger.info("知识库加载完成 [%s]: %d 条问答, %d 行速查", filepath, len(entries), len(raw_lines))
     return text

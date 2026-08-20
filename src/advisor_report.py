@@ -99,6 +99,15 @@ def _fetch_report(session_id: str) -> dict | None:
     return data
 
 
+def _as_str_list(value) -> list[str]:
+    """上游列表字段归一：若误返回字符串（如 "敏感肌"）按单元素处理，避免被逐字符迭代成 "敏、感、肌\""""
+    if isinstance(value, list):
+        return [str(x) for x in value if x]
+    if value:
+        return [str(value)]
+    return []
+
+
 def build_profile_fields(report: dict) -> dict:
     """报告摘要 → 用户护肤档案字段（与 AI 顾问档案标签一致：肤质/性别/年龄/诉求等）
 
@@ -165,12 +174,12 @@ def build_profile_fields(report: dict) -> dict:
     if isinstance(q, dict):
         if q.get("ageRange"):
             fields["年龄段"] = str(q["ageRange"])
-        primary = [str(c) for c in (q.get("primaryConcerns") or []) if c]
+        primary = _as_str_list(q.get("primaryConcerns"))
         if primary:
             fields["关注问题"] = "、".join(primary)
 
         # 安全相关字段：过敏史 / 孕期状态直接影响产品成分推荐，加 ⚠️ 让 AI 优先注意
-        allergies = [str(a) for a in (q.get("allergies") or []) if a]
+        allergies = _as_str_list(q.get("allergies"))
         if allergies:
             text = "、".join(allergies)
             # 按是否含真实过敏原判断：上游可能返回 ["无过敏史", "花粉"] 这类组合，
@@ -244,7 +253,7 @@ def build_welcome_text(report: dict) -> str:
         value = q.get(key)
         return str(value) if value else "暂未填写"
 
-    concerns = [str(c) for c in (q.get("primaryConcerns") or []) if c]
+    concerns = _as_str_list(q.get("primaryConcerns"))
     gender_label = {"male": "男", "female": "女"}.get(gender, "暂未填写")
     tested_at = _report_date(report)
 
