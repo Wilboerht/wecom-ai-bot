@@ -41,7 +41,7 @@ class TestEnterSessionEvent:
         handled = []
         monkeypatch.setattr(
             "src.core._handle_enter_session_event",
-            lambda kfid, event: handled.append(event),
+            lambda kfid, event: handled.append(event) or True,
         )
         monkeypatch.setattr(
             "src.wecom.wxkf.sync_messages",
@@ -93,7 +93,7 @@ class TestEnterSessionEvent:
         handled = []
         monkeypatch.setattr(
             "src.core._handle_enter_session_event",
-            lambda kfid, event: handled.append(event),
+            lambda kfid, event: handled.append(event) or True,
         )
 
         def fake_sync(**kw):
@@ -110,6 +110,51 @@ class TestEnterSessionEvent:
         process_kf_messages("token-1", KFID_ADVISOR)
         assert len(handled) == 1
         assert handled[0]["scene_param"] == "sess-9999999999"
+
+    def test_failure_releases_msgid_allows_retry(self, monkeypatch):
+        """处理失败（返回 False）回滚 msgid 认领，企微重推后可重试成功"""
+        self._local_dedup(monkeypatch)
+        results = iter([False, True])
+        handled = []
+        monkeypatch.setattr(
+            "src.core._handle_enter_session_event",
+            lambda kfid, event: handled.append(event) or next(results),
+        )
+        monkeypatch.setattr(
+            "src.wecom.wxkf.sync_messages",
+            lambda **kw: {
+                "msg_list": [dict(ENTER_SESSION_MSG)],
+                "next_cursor": "",
+                "has_more": 0,
+            },
+        )
+
+        process_kf_messages("token-1", KFID_ADVISOR)  # 失败 → release
+        process_kf_messages("token-2", KFID_ADVISOR)  # 重推重试成功
+
+        assert len(handled) == 2
+
+    def test_success_does_not_release(self, monkeypatch):
+        """处理成功（返回 True）不 release，重推被去重跳过"""
+        self._local_dedup(monkeypatch)
+        handled = []
+        monkeypatch.setattr(
+            "src.core._handle_enter_session_event",
+            lambda kfid, event: handled.append(event) or True,
+        )
+        monkeypatch.setattr(
+            "src.wecom.wxkf.sync_messages",
+            lambda **kw: {
+                "msg_list": [dict(ENTER_SESSION_MSG)],
+                "next_cursor": "",
+                "has_more": 0,
+            },
+        )
+
+        process_kf_messages("token-1", KFID_ADVISOR)
+        process_kf_messages("token-2", KFID_ADVISOR)
+
+        assert len(handled) == 1
 
 
 class TestHumanSessionNotInterrupted:

@@ -63,6 +63,10 @@ def process_message(message) -> str | None:
     if isinstance(message, EventMessage):
         event = message.event.lower()
         if event in ("enter_agent", "subscribe"):
+            # 公众号事件类消息无 MsgId：企微超时重推会重复发欢迎语，用合成 key 去重
+            claim_key = f"wx:event:{message.from_user}:{event}:{message.create_time}"
+            if not store.msgid_claim(claim_key):
+                return None
             return "您好，欢迎来到 NIHPLOD 旎柏，很高兴为您服务。请问有什么可以帮到您？如需人工客服，请回复「转人工」。"
         return None
 
@@ -129,6 +133,11 @@ def handle_callback(body: str, query: dict, crypto: WXBizMsgCrypt) -> dict:
         open_kfid = root.findtext("OpenKfId", "")
         if token and open_kfid:
             return {"reply_xml": None, "kf_token": token, "kf_open_kfid": open_kfid}
+        # 缺 Token/OpenKfId 无法拉取消息，记 warning（只记字段存在性）便于排查静默丢弃
+        logger.warning(
+            "kf_msg_or_event 缺 Token/OpenKfId，事件已丢弃: has_token=%s has_open_kfid=%s",
+            bool(token), bool(open_kfid),
+        )
         return {"reply_xml": None}
 
     # 普通消息
@@ -189,12 +198,12 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
         return _state_cache[euid]
 
     def _merge_flow_context(euid: str, user_text: str) -> str:
-        """转人工时把订单查询流程里收集到的渠道/订单号并入上下文"""
+        """转人工时把订单查询流程里收集到的渠道/订单号并入上下文。
+        只读不删：转接成功后由调用方 kv_delete，失败时上下文保留可重试"""
         key = _order_flow_key(open_kfid, euid)
         info = store.kv_get(key)
         if not info:
             return user_text
-        store.kv_delete(key)
         try:
             d = json.loads(info)
         except Exception:
@@ -211,31 +220,49 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
         key = _order_flow_key(open_kfid, euid)
         info = store.kv_get(key)
         if info:
+            # 流程内退出关键词：命中即删除流程状态并确认
+            if any(w in user_text for w in ORDER_FLOW_EXIT_WORDS):
+                store.kv_delete(key)
+                _do_send_kf(open_kfid, euid, "好的，已取消订单查询。如需人工客服，请回复「转人工」。")
+                return True
             try:
                 d = json.loads(info)
             except Exception:
                 d = {}
             if d.get("step") == "orderno":
-                if not _extract_order_no(user_text):
+                order_no = _extract_order_no(user_text)
+                if not order_no:
+                    # 重试上限：多次未识别到有效订单号自动退出，避免用户卡死在流程里
+                    attempts = int(d.get("attempts", 0)) + 1
+                    if attempts >= ORDER_FLOW_MAX_ATTEMPTS:
+                        store.kv_delete(key)
+                        _do_send_kf(open_kfid, euid, "还是没有识别到订单号，已先为您退出订单查询，稍后可回复「查订单」重新开始。")
+                        return True
+                    d["attempts"] = attempts
+                    store.kv_set(key, json.dumps(d, ensure_ascii=False), ORDER_FLOW_TTL)
                     _do_send_kf(open_kfid, euid, "这个看起来不像是订单号，麻烦再发一下订单号哦。")
                     return True
-                order_no = _extract_order_no(user_text)
-                store.kv_delete(key)
-                _transferred_in_batch.add(euid)
-                _handle_kf_transfer(
+                # 转接成功才删除流程上下文；全员失败/非服务时间时保留，稍后可重试
+                if _handle_kf_transfer(
                     open_kfid, euid, candidates,
                     f"查询订单（购买渠道：{d.get('channel', '')}，订单号：{order_no}）",
-                )
+                ):
+                    store.kv_delete(key)
+                    _transferred_in_batch.add(euid)
                 return True
             # step == channel
             channel, order_no = _split_channel_order(user_text)
             if order_no:
-                store.kv_delete(key)
-                _transferred_in_batch.add(euid)
-                _handle_kf_transfer(
+                if _handle_kf_transfer(
                     open_kfid, euid, candidates,
                     f"查询订单（购买渠道：{channel}，订单号：{order_no}）",
-                )
+                ):
+                    store.kv_delete(key)
+                    _transferred_in_batch.add(euid)
+                return True
+            # 渠道输入长度校验：超长输入不采信，按无效输入处理
+            if len(user_text) > ORDER_FLOW_CHANNEL_MAX_LEN:
+                _do_send_kf(open_kfid, euid, "没看懂您说的购买渠道，麻烦直接回复平台名称，如「小红书」「天猫国际」「抖音商城」。")
                 return True
             d["channel"] = channel
             d["step"] = "orderno"
@@ -255,10 +282,12 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             event = msg.get("event") or {}
             if event.get("event_type") == "enter_session":
                 # 与文本消息一致做 msgid 去重：sync_msg 每次从头拉取，
-                # 不去重会随后续回调反复重放该事件（重复拉报告/写档案/发欢迎语）
+                # 不去重会随后续回调反复重放该事件（重复拉报告/写档案/发欢迎语）；
+                # 处理失败（如报告拉取失败）回滚认领，允许企微重推后重试
                 msg_id = msg.get("msgid", "")
                 if msg_id and store.msgid_claim(msg_id):
-                    _handle_enter_session_event(open_kfid, event)
+                    if not _handle_enter_session_event(open_kfid, event):
+                        store.msgid_release(msg_id)
             return
 
         if msg.get("origin") != 3:
@@ -303,13 +332,6 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
         # 统一截断：发 LLM 与存历史用同一份文本
         user_text = user_text[:2000]
 
-        if send_time and time.time() - send_time > 120:
-            return
-        if check_rate_limit(external_userid, send_time):
-            if not _do_send_kf(open_kfid, external_userid, "您的消息发送过于频繁，请稍后再试。"):
-                store.msgid_release(msg_id)
-            return
-
         # 转人工关键词（账号级配置，品牌客服含纠纷场景词）；裸「人工」不做子串匹配，避免误伤「人工智能/人工合成」
         transfer_keywords = account.get("transfer_keywords") or ["转人工", "人工客服", "人工服务", "真人客服", "找人工", "真人", "转接", "有人吗"]
 
@@ -319,7 +341,19 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             return
 
         if state == 3 or transferred:
-            # 人工接待中（或刚转接成功、state 尚未生效）：机器人不回复、不结束会话、不打断
+            # 人工接待中（或刚转接成功、state 尚未生效）：机器人不回复、不结束会话、不打断；
+            # 该判断必须先于限流，否则人工接待中机器人会插嘴限流提示
+            return
+
+        if send_time and time.time() - send_time > 120:
+            return
+
+        # 转人工诉求豁免限流：先判转人工，命中直接转，避免被限流拦截
+        transfer_hit = _transfer_requested(user_text, transfer_keywords) and not _is_policy_question(user_text)
+
+        if not transfer_hit and check_rate_limit(external_userid, send_time):
+            if not _do_send_kf(open_kfid, external_userid, "您的消息发送过于频繁，请稍后再试。"):
+                store.msgid_release(msg_id)
             return
 
         if state in (0, 1):
@@ -329,10 +363,13 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 store.privacy_notice_accept(open_kfid, external_userid)
 
             # AI 可处理
-            if _transfer_requested(user_text, transfer_keywords) and not _is_policy_question(user_text):
+            if transfer_hit:
                 logger.info("KF transfer triggered: user=%s text_len=%d", external_userid, len(user_text))
                 _transferred_in_batch.add(external_userid)
-                _handle_kf_transfer(open_kfid, external_userid, candidates, _merge_flow_context(external_userid, user_text))
+                ctx = _merge_flow_context(external_userid, user_text)
+                # 转接成功才清理订单流程上下文；失败保留，稍后可重试
+                if _handle_kf_transfer(open_kfid, external_userid, candidates, ctx):
+                    store.kv_delete(_order_flow_key(open_kfid, external_userid))
                 return
 
             # 订单查询引导流程：先问购买渠道，再问订单号，收集齐转人工
@@ -429,20 +466,22 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
         logger.error("KF 消息拉取/处理失败: open_kfid=%s err=%s", open_kfid, e)
 
 
-def _handle_enter_session_event(open_kfid: str, event: dict) -> None:
-    """enter_session 事件：仅对开启测肤报告联动的客服账号生效"""
+def _handle_enter_session_event(open_kfid: str, event: dict) -> bool:
+    """enter_session 事件：仅对开启测肤报告联动的客服账号生效。
+    返回 True 表示处理完成或明确无需处理；False 表示可重试失败，调用方应 msgid_release"""
     account = config.get_account(open_kfid)
     if not account.get("advisor_report"):
-        return
+        return True
     external_userid = (event.get("external_userid") or "").strip()
     if not external_userid:
-        return
+        return True
     try:
         from .advisor_report import handle_enter_session
 
-        handle_enter_session(open_kfid, external_userid, event)
+        return bool(handle_enter_session(open_kfid, external_userid, event))
     except Exception as e:
         logger.exception("enter_session 处理异常: %s", e)
+        return False
 
 
 def _pick_agent(external_userid: str, open_kfid: str, candidates: list) -> str:
@@ -455,6 +494,19 @@ def _pick_agent(external_userid: str, open_kfid: str, candidates: list) -> str:
     return store.transfer_pick_agent(open_kfid, candidates, last)
 
 
+def _service_hour(name: str, default: int) -> int:
+    """读取服务时间配置：None 用默认值；非法值记 warning 落默认。
+    不能用 `or` 兜底——0 是合法值（如 SERVICE_START_HOUR=0 表示全天从 0 点开始）"""
+    raw = getattr(config, name, None)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        logger.warning("%s 配置非法(%r)，使用默认值 %s", name, raw, default)
+        return default
+
+
 def is_within_service_hours() -> bool:
     """检查当前是否在人工服务时间（默认周一至周五 10:00-20:00，中国时区）"""
     now = datetime.now(ZoneInfo("Asia/Shanghai"))
@@ -462,8 +514,8 @@ def is_within_service_hours() -> bool:
     if now.weekday() >= 5:
         return False
     # 10:00 到 20:00，可通过环境变量调整
-    start_hour = int(getattr(config, "SERVICE_START_HOUR", 10) or 10)
-    end_hour = int(getattr(config, "SERVICE_END_HOUR", 20) or 20)
+    start_hour = _service_hour("SERVICE_START_HOUR", 10)
+    end_hour = _service_hour("SERVICE_END_HOUR", 20)
     if now.hour < start_hour or now.hour >= end_hour:
         return False
     return True
@@ -476,18 +528,20 @@ def _order_transfer_candidates(candidates: list, last: str) -> list:
     return list(candidates)
 
 
-def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, user_text: str = "") -> None:
-    """转人工：依次尝试候选客服，失败自动换下一位；全部失败提示客户。服务时间外不转人工"""
+def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, user_text: str = "") -> bool:
+    """转人工：依次尝试候选客服，失败自动换下一位；全部失败提示客户。服务时间外不转人工。
+    返回 True 表示转接成功；False 表示未转接（服务时间外/无候选/全员失败），
+    调用方可据此决定是否保留订单流程等上下文"""
     if not is_within_service_hours():
         _do_send_kf(
             open_kfid, external_userid,
             "您反馈的问题需要人工客服跟进处理，人工客服服务时间为周一至周五 10:00-20:00。建议您在该时间段内再来联系我们，客服会第一时间为您处理。",
         )
-        return
+        return False
 
     if not candidates:
         _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
-        return
+        return False
 
     from .wecom.wxkf import transfer_session, send_agent_notice
 
@@ -520,7 +574,7 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
 
     if not chosen:
         _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
-        return
+        return False
 
     store.set_last_agent(external_userid, chosen)
     # 跨批次标记: state=3 生效有延迟, TTL 内命中则机器人不再回复（消息处理开头检查）
@@ -538,10 +592,17 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
             )
         except Exception as e:
             logger.error(f"客服通知发送失败: {e}")
+    return True
 
 
 # ---- 订单查询引导流程 ----
 ORDER_FLOW_TTL = 600
+# 流程内退出关键词：命中即退出订单查询流程
+ORDER_FLOW_EXIT_WORDS = ("算了", "不用了", "取消")
+# 订单号重试上限：超过自动退出流程，提示稍后可重试
+ORDER_FLOW_MAX_ATTEMPTS = 3
+# 购买渠道输入长度上限：超长不采信，按无效输入处理
+ORDER_FLOW_CHANNEL_MAX_LEN = 20
 # 转人工跨批次标记 TTL（秒）：覆盖 state=3 生效前的延迟窗口
 TRANSFERRED_MARK_TTL = 300
 ORDER_TRIGGERS = (
@@ -554,15 +615,23 @@ def _order_flow_key(open_kfid: str, external_userid: str) -> str:
     return f"orderflow:{open_kfid}:{external_userid}"
 
 
+# 独立成号的 11 位手机号（1[3-9] 开头，前后无其他数字）：
+# 兜底匹配长数字前先剔除，避免手机号被误判为订单号
+_PHONE_RE = re.compile(r"(?<!\d)1[3-9]\d{9}(?!\d)")
+
+
+def _bare_order_no_search(text: str) -> re.Match | None:
+    """剔除独立手机号后匹配 10 位以上纯数字"""
+    return re.search(r"\d{10,}", _PHONE_RE.sub("", text))
+
+
 def _extract_order_no(text: str) -> str:
-    """从文本提取订单号：带「订单号/单号」前缀的6-32位字母数字，或10位以上纯数字"""
+    """从文本提取订单号：带「订单号/单号」前缀的6-32位字母数字，或10位以上纯数字（排除11位手机号）"""
     m = re.search(r"(?:订单号|单号)[:：\s]*([A-Za-z0-9\-]{6,32})", text)
     if m:
         return m.group(1)
-    m = re.search(r"\d{10,}", text)
-    if m:
-        return m.group(0)
-    return ""
+    m = _bare_order_no_search(text)
+    return m.group(0) if m else ""
 
 
 def _split_channel_order(text: str) -> tuple[str, str]:
@@ -570,7 +639,7 @@ def _split_channel_order(text: str) -> tuple[str, str]:
     order_no = _extract_order_no(text)
     if not order_no:
         return text.strip()[:50], ""
-    m = re.search(r"(?:订单号|单号)[:：\s]*([A-Za-z0-9\-]{6,32})", text) or re.search(r"\d{10,}", text)
+    m = re.search(r"(?:订单号|单号)[:：\s]*([A-Za-z0-9\-]{6,32})", text) or _bare_order_no_search(text)
     channel = (text[:m.start()] + text[m.end():]).strip(" ,，。.")
     return channel[:50], order_no
 

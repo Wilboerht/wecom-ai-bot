@@ -354,6 +354,207 @@ class TestWelcomeFallback:
         assert on_event == ["wcode-9"]
         assert sent == []
 
+    def test_welcome_code_path_dedup_by_scene(self, monkeypatch):
+        """welcome_code 路径同样按 scene_param 去重：同一份报告不重复发"""
+        sent = []
+        on_event = []
+        self._setup(monkeypatch, sent)
+        monkeypatch.setattr(
+            "src.wecom.wxkf.send_msg_on_event",
+            lambda corpid, secret, code, content: on_event.append(code) or True,
+        )
+
+        for _ in range(3):
+            advisor_report.handle_enter_session(
+                "kfc7834894b7ee2b86a", "wm_fallback_5",
+                {"scene_param": "sess-fb-0005", "welcome_code": "wcode-10"},
+            )
+
+        assert on_event == ["wcode-10"]
+
+    def test_welcome_code_failure_falls_back_to_send_message(self, monkeypatch):
+        """welcome_code 发送失败：降级普通 send_msg 再试一次"""
+        sent = []
+        self._setup(monkeypatch, sent)
+        monkeypatch.setattr(
+            "src.wecom.wxkf.send_msg_on_event",
+            lambda corpid, secret, code, content: False,
+        )
+
+        advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_fallback_6",
+            {"scene_param": "sess-fb-0006", "welcome_code": "wcode-bad"},
+        )
+
+        assert len(sent) == 1
+        assert sent[0]["to_user"] == "wm_fallback_6"
+
+    def test_all_failed_releases_marker_allows_retry(self, monkeypatch):
+        """两条路径都失败：释放去重标记，下次事件可重试"""
+        sent = []
+        self._setup(monkeypatch, sent)
+        fail = {"on": True}
+
+        def fake_send(corpid, secret, to_user, open_kfid, msgtype, content, msgid=""):
+            if fail["on"]:
+                return False
+            sent.append(content)
+            return True
+
+        monkeypatch.setattr("src.wecom.wxkf.send_message", fake_send)
+
+        advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_fallback_7",
+            {"scene_param": "sess-fb-0007"},
+        )
+        assert sent == []
+
+        fail["on"] = False
+        advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_fallback_7",
+            {"scene_param": "sess-fb-0007"},
+        )
+        assert len(sent) == 1
+
+
+class TestHandleEnterSessionReturn:
+    """handle_enter_session 返回 bool：终态 True，可重试失败 False"""
+
+    def _setup(self, monkeypatch):
+        monkeypatch.setattr("src.advisor_report.store.profile_replace_report_keys", lambda a, b, c, d: None)
+        monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
+        monkeypatch.setattr(config, "ADVISOR_REPORT_API_URL", "https://x")
+        monkeypatch.setattr(config, "KF_SEND_WELCOME", False)
+
+    def test_retryable_fetch_failure_returns_false(self, monkeypatch):
+        """网络/5xx 等可重试拉取失败返回 False（配合 msgid release 重试）"""
+        self._setup(monkeypatch)
+
+        def boom(sid):
+            raise advisor_report.ReportFetchRetryableError("status 500")
+
+        monkeypatch.setattr(advisor_report, "_fetch_report", boom)
+        assert advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_ret_1", {"scene_param": "sess-ret-0001"}
+        ) is False
+
+    def test_report_not_found_returns_true(self, monkeypatch):
+        """报告不存在（404 终态）返回 True，不重试"""
+        self._setup(monkeypatch)
+        monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: None)
+        assert advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_ret_2", {"scene_param": "sess-ret-0002"}
+        ) is True
+
+    def test_invalid_scene_param_returns_true(self):
+        """无/非法 scene_param 明确无需处理，返回 True"""
+        assert advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_ret_3", {"scene_param": "bad!"}
+        ) is True
+
+    def test_success_returns_true(self, monkeypatch):
+        self._setup(monkeypatch)
+        monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: FAKE_REPORT)
+        assert advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_ret_4", {"scene_param": "sess-ret-0004"}
+        ) is True
+
+    def test_profile_write_failure_returns_false(self, monkeypatch):
+        """档案写入异常返回 False"""
+        self._setup(monkeypatch)
+
+        def boom(a, b, c, d):
+            raise RuntimeError("redis boom")
+
+        monkeypatch.setattr("src.advisor_report.store.profile_replace_report_keys", boom)
+        monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: FAKE_REPORT)
+        assert advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_ret_5", {"scene_param": "sess-ret-0005"}
+        ) is False
+
+
+class TestFetchReportRobustness:
+    def test_non_dict_json_returns_none(self, monkeypatch):
+        """上游返回非对象 JSON（数组/标量）：按失败处理但不崩"""
+        monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
+        monkeypatch.setattr(config, "ADVISOR_REPORT_API_URL", "https://x")
+
+        class Resp:
+            status_code = 200
+
+            def json(self):
+                return ["not", "a", "dict"]
+
+        monkeypatch.setattr(advisor_report.httpx, "get", lambda *a, **kw: Resp())
+        assert advisor_report._fetch_report("sess-nd-0001") is None
+
+    def test_5xx_raises_retryable(self, monkeypatch):
+        """5xx 重试耗尽抛 ReportFetchRetryableError"""
+        monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
+        monkeypatch.setattr(config, "ADVISOR_REPORT_API_URL", "https://x")
+        monkeypatch.setattr(advisor_report.time, "sleep", lambda s: None)
+
+        class Resp:
+            status_code = 500
+
+            def json(self):
+                return {}
+
+        monkeypatch.setattr(advisor_report.httpx, "get", lambda *a, **kw: Resp())
+        with pytest.raises(advisor_report.ReportFetchRetryableError):
+            advisor_report._fetch_report("sess-nd-0002")
+
+    def test_404_returns_none_without_retry(self, monkeypatch):
+        """404 是终态：不重试、返回 None"""
+        monkeypatch.setattr(config, "INTERNAL_API_KEY", "k")
+        monkeypatch.setattr(config, "ADVISOR_REPORT_API_URL", "https://x")
+        calls = {"n": 0}
+
+        class Resp:
+            status_code = 404
+
+            def json(self):
+                return {}
+
+        def fake_get(*a, **kw):
+            calls["n"] += 1
+            return Resp()
+
+        monkeypatch.setattr(advisor_report.httpx, "get", fake_get)
+        assert advisor_report._fetch_report("sess-nd-0003") is None
+        assert calls["n"] == 1
+
+
+class TestGenderAndNickname:
+    def test_unknown_gender_no_profile_field(self):
+        """gender 白名单：未知值不写「性别」字段"""
+        fields = advisor_report.build_profile_fields({"found": True, "gender": "other"})
+        assert "性别" not in fields
+
+    def test_unknown_gender_welcome_falls_back(self):
+        """未知 gender：称呼回退「顾客」，性别行显示暂未填写"""
+        text = advisor_report.build_welcome_text({"found": True, "gender": "other"})
+        assert "尊敬的顾客您好" in text
+        assert "性别：暂未填写" in text
+
+    def test_nickname_sanitized(self):
+        """nickname 去换行、截断 32 字符"""
+        text = advisor_report.build_welcome_text(
+            {"found": True, "gender": "female", "nickname": "小\n雨" + "x" * 100}
+        )
+        first_line = text.split("\n", 1)[0]
+        assert "小雨" in first_line
+        # 称呼部分（昵称+女士）不超过 32+2 字符
+        name = first_line.split("您好")[0].replace("尊敬的", "")
+        assert len(name) <= 34
+
+    def test_naive_created_at_as_shanghai(self):
+        """naive createdAt 按中国时区解释"""
+        text = advisor_report.build_welcome_text(
+            {**FAKE_REPORT, "createdAt": "2026-08-01T10:00:00"}
+        )
+        assert "最近一次的肌智派测肤时间: 2026年08月01日" in text
+
 
 class TestKfLinkEndpoint:
     @pytest.mark.asyncio

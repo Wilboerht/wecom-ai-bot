@@ -34,6 +34,76 @@ class TestHotReload:
     def test_missing_file_returns_empty(self, tmp_path):
         assert load_knowledge(str(tmp_path / "nonexistent.txt")) == ""
 
+    def test_missing_file_warns_only_once(self, tmp_path, caplog):
+        """文件缺失也缓存：重复读取只 warn 一次不刷屏"""
+        import logging
+
+        fp = str(tmp_path / "nonexistent2.txt")
+        with caplog.at_level(logging.WARNING, logger="src.ai.knowledge"):
+            assert load_knowledge(fp) == ""
+            assert load_knowledge(fp) == ""
+            assert load_knowledge(fp) == ""
+        warns = [r for r in caplog.records if "未找到" in r.message]
+        assert len(warns) == 1
+
+    def test_missing_file_hot_loads_when_appears(self, tmp_path):
+        """缺失缓存不挡热加载：文件出现后 mtime 变化自然重新解析"""
+        fp = tmp_path / "kb_appear.txt"
+        assert load_knowledge(str(fp)) == ""
+        _write(fp, "Q: 价格\nA: 100元\n")
+        assert "100元" in load_knowledge(str(fp))
+
+
+class TestReadFailure:
+    def test_oserror_keeps_old_cache(self, tmp_path, caplog, monkeypatch):
+        """open 抛 OSError（文件被占用/权限）时沿用旧缓存并记 error"""
+        import logging
+
+        fp = tmp_path / "kb_err1.txt"
+        _write(fp, "Q: 价格\nA: 100元\n", mtime=1000000.0)
+        assert "100元" in load_knowledge(str(fp))
+
+        os.utime(fp, (1000100.0, 1000100.0))  # mtime 变化绕过缓存命中
+
+        def _raise(*args, **kwargs):
+            raise OSError("file locked")
+
+        monkeypatch.setattr("builtins.open", _raise)
+        with caplog.at_level(logging.ERROR, logger="src.ai.knowledge"):
+            text = load_knowledge(str(fp))
+        assert "100元" in text
+        assert any("读取失败" in r.message for r in caplog.records)
+
+    def test_oserror_without_cache_returns_empty(self, tmp_path, caplog, monkeypatch):
+        """无缓存时 open 异常返回空知识库并记 error"""
+        import logging
+
+        fp = tmp_path / "kb_err2.txt"
+        _write(fp, "Q: 价格\nA: 100元\n")
+
+        def _raise(*args, **kwargs):
+            raise OSError("file locked")
+
+        monkeypatch.setattr("builtins.open", _raise)
+        with caplog.at_level(logging.ERROR, logger="src.ai.knowledge"):
+            assert load_knowledge(str(fp)) == ""
+        assert any("读取失败" in r.message for r in caplog.records)
+
+    def test_empty_parse_keeps_old_cache(self, tmp_path, caplog):
+        """半写入防护：解析结果为空（可能读到写了一半的文件）时沿用旧缓存"""
+        import logging
+
+        fp = tmp_path / "kb_half.txt"
+        _write(fp, "Q: 价格\nA: 100元\n", mtime=1000000.0)
+        assert "100元" in load_knowledge(str(fp))
+
+        # 只写了半条（有 Q 无 A），解析结果为空
+        _write(fp, "Q: 价格\n", mtime=1000100.0)
+        with caplog.at_level(logging.WARNING, logger="src.ai.knowledge"):
+            text = load_knowledge(str(fp))
+        assert "100元" in text
+        assert any("解析结果为空" in r.message for r in caplog.records)
+
 
 class TestContinuationParsing:
     def test_blank_line_ends_answer(self, tmp_path):

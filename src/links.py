@@ -31,7 +31,12 @@ def load_links(path: str = "links.json") -> dict[str, str]:
         return _links  # mtime 未变，沿用缓存
     try:
         with open(path, "r", encoding="utf-8") as f:
-            _links = json.load(f)
+            data = json.load(f)
+        # 合法 JSON 但顶层不是对象（如 []）时按加载失败处理，
+        # 否则 _links 被污染后 shorten_text 的 .items() 会反复抛 AttributeError
+        if not isinstance(data, dict):
+            raise ValueError("links.json 顶层必须是对象 (code → 长链接)")
+        _links = data
         _links_mtime = mtime
     except Exception as e:
         logger.error("links.json 加载失败: %s（沿用现有缓存 %d 条）", e, len(_links))

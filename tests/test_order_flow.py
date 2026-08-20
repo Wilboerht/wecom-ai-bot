@@ -73,6 +73,18 @@ class TestOrderFlow:
     def test_extract_order_no_none(self):
         assert _extract_order_no("天猫买的") == ""
 
+    def test_extract_order_no_not_phone(self):
+        """11 位手机号不应被 \\d{10,} 兜底误判为订单号"""
+        assert _extract_order_no("我的手机号是13812345678") == ""
+        assert _extract_order_no("手机13812345678，订单20260801123456") == "20260801123456"
+        # 非手机号号段的 11 位数字仍按订单号识别
+        assert _extract_order_no("12345678901") == "12345678901"
+
+    def test_split_channel_order_with_phone(self):
+        """渠道回复带手机号：不拆出订单号"""
+        ch, no = _split_channel_order("抖音 13812345678")
+        assert no == ""
+
     def test_split_channel_order(self):
         ch, no = _split_channel_order("天猫买的，订单号1234567890")
         assert ch == "天猫买的"

@@ -35,15 +35,25 @@ if not config.REDIS_URL:
     logger.warning("未配置 REDIS_URL：去重/限流/会话为进程内存模式，仅适用于单 worker 部署；多 worker 部署请配置 Redis")
 
 
+# code 写入日志前清洗：URL 解码后可含换行/控制字符，防止伪造日志行
+_LOG_SAFE_RE = re.compile(r"[^0-9A-Za-z_-]")
+
+
+def _sanitize_log_code(code: str) -> str:
+    """日志用 code 清洗：非白名单字符替换为 ?，并截断 64 字符"""
+    return _LOG_SAFE_RE.sub("?", code)[:64]
+
+
 @app.get("/l/{code}")
 async def short_link(code: str, request: Request):
     """短链跳转: /l/{code} → 真实购买链接"""
     url = get_target(code)
+    safe_code = _sanitize_log_code(code)
     if not url:
-        logger.info("短链未命中: code=%s", code)
+        logger.info("短链未命中: code=%s", safe_code)
         return Response(content="链接不存在", status_code=404)
     # 转化统计：只记 code 与 UA，不记 IP 等 PII（nginx 已做 real_ip）
-    logger.info("短链点击: code=%s ua=%s", code, request.headers.get("user-agent", "-"))
+    logger.info("短链点击: code=%s ua=%s", safe_code, request.headers.get("user-agent", "-"))
     return RedirectResponse(url=url, status_code=302)
 
 crypto_wecom = WXBizMsgCrypt(
@@ -67,6 +77,10 @@ async def catch_errors(request: Request, call_next):
         return await call_next(request)
     except Exception:
         logger.error("未处理异常: %s", traceback.format_exc())
+        # 回调路由返回 200 空是有意的（防企微重试风暴）；
+        # /health 异常必须返回 500，否则监控会把故障实例误判为存活
+        if request.url.path == "/health":
+            return Response(content="", status_code=500)
         return Response(content="", status_code=200)
 
 
@@ -233,6 +247,12 @@ async def handle_wx_callback_route(request: Request, background_tasks: Backgroun
 
 
 def _route(body: str, query: dict, crypto: WXBizMsgCrypt, bg: BackgroundTasks) -> Response:
+    # 十亿 laughs 防护：正常回调无 DTD，且外层 XML 只含 base64 密文（不会出现 <!），
+    # 解析前直接拒绝含 DOCTYPE 的 body；按验签失败同等方式处理（记 warning、返回 200 空）
+    if "<!doctype" in body.lower():
+        logger.warning("回调 XML 含 DOCTYPE 声明，疑似实体注入攻击，已拒绝")
+        return Response(content="", status_code=200)
+
     result = handle_callback(body, query, crypto)
 
     # 微信客服消息 — 异步处理，立即返回 200

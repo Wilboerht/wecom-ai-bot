@@ -248,3 +248,91 @@ class TestCallbackMessage:
             headers={"Content-Type": "text/xml"},
         )
         assert resp.status_code == 200
+
+
+class TestDoctypeRejection:
+    @pytest.mark.asyncio
+    async def test_doctype_body_rejected(self, client, caplog):
+        """含 DOCTYPE 的 body 在解析前被拒：记 warning、返回 200 空（防十亿 laughs）"""
+        import logging
+
+        body = (
+            '<?xml version="1.0"?>'
+            '<!DOCTYPE foo [<!ENTITY lol "lollollol">]>'
+            "<xml><ToUserName><![CDATA[x]]></ToUserName>"
+            "<Encrypt><![CDATA[&lol;]]></Encrypt></xml>"
+        )
+        with caplog.at_level(logging.WARNING, logger="src.main"):
+            resp = await client.post(
+                "/callback",
+                params={"msg_signature": "x", "timestamp": "1", "nonce": "y"},
+                content=body,
+                headers={"Content-Type": "text/xml"},
+            )
+        assert resp.status_code == 200
+        assert resp.text == ""
+        assert any("DOCTYPE" in r.message for r in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_doctype_case_insensitive(self, client):
+        """DOCTYPE 检测大小写不敏感"""
+        body = "<!doctype foo><xml><Encrypt><![CDATA[x]]></Encrypt></xml>"
+        resp = await client.post(
+            "/callback",
+            params={"msg_signature": "x", "timestamp": "1", "nonce": "y"},
+            content=body,
+            headers={"Content-Type": "text/xml"},
+        )
+        assert resp.status_code == 200
+        assert resp.text == ""
+
+
+class TestShortLinkLogSanitize:
+    @pytest.mark.asyncio
+    async def test_code_with_newline_sanitized(self, client, monkeypatch, caplog):
+        """code 含 %0A 解码后的换行时日志被清洗，不能伪造日志行"""
+        import logging
+
+        monkeypatch.setattr("src.links._links", {"abc": "https://example.com/buy"})
+        with caplog.at_level(logging.INFO, logger="src.main"):
+            resp = await client.get("/l/abc%0AFORGED:injected")
+        assert resp.status_code == 404
+        miss_logs = [r.message for r in caplog.records if "短链未命中" in r.message]
+        assert miss_logs
+        for m in miss_logs:
+            # 非白名单字符（换行、冒号）被替换为 ?，无法伪造日志行
+            assert m == "短链未命中: code=abc?FORGED?injected"
+
+
+class TestHealthMiddleware:
+    @pytest.mark.asyncio
+    async def test_health_error_returns_500(self, caplog):
+        """/health 异常返回 500 而非空 200，避免监控误判存活"""
+        import logging
+        from types import SimpleNamespace
+
+        from src.main import catch_errors
+
+        request = SimpleNamespace(url=SimpleNamespace(path="/health"))
+
+        async def boom(_):
+            raise RuntimeError("health broken")
+
+        with caplog.at_level(logging.ERROR, logger="src.main"):
+            resp = await catch_errors(request, boom)
+        assert resp.status_code == 500
+
+    @pytest.mark.asyncio
+    async def test_other_route_error_returns_200(self):
+        """其余路由维持 200 兜底（回调防企微重试风暴是有意的）"""
+        from types import SimpleNamespace
+
+        from src.main import catch_errors
+
+        request = SimpleNamespace(url=SimpleNamespace(path="/callback"))
+
+        async def boom(_):
+            raise RuntimeError("callback broken")
+
+        resp = await catch_errors(request, boom)
+        assert resp.status_code == 200

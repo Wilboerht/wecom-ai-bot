@@ -66,6 +66,23 @@ class TestKvTTL:
         assert store.kv_get(key) == ""
 
 
+class TestKvSetNx:
+    def test_nx_claim_once(self):
+        """原子占用：首次成功，重复失败（内存模式）"""
+        key = _uid()
+        assert store.kv_set_nx(key, "1", 100) is True
+        assert store.kv_set_nx(key, "1", 100) is False
+        assert store.kv_get(key) == "1"
+
+    def test_nx_expired_can_reclaim(self):
+        """已过期的标记可被重新占用"""
+        key = _uid()
+        assert store.kv_set_nx(key, "1", 100) is True
+        store._inmem_kv[key] = ("1", time.time() - 1)
+        assert store.kv_set_nx(key, "2", 100) is True
+        assert store.kv_get(key) == "2"
+
+
 class TestSessionAtomicAppend:
     def test_concurrent_append_no_loss(self):
         """内存模式多线程追加不丢消息（GIL 下 list.append 原子）"""

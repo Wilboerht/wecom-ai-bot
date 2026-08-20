@@ -70,6 +70,13 @@ class TestKv:
     def test_get_missing_returns_empty(self, fake_redis):
         assert store.kv_get("no-such-key") == ""
 
+    def test_kv_set_nx_atomic(self, fake_redis):
+        """SET NX EX：首次占用成功，重复失败，带 TTL"""
+        assert store.kv_set_nx("nx1", "v", ttl=60) is True
+        assert store.kv_set_nx("nx1", "v", ttl=60) is False
+        assert store.kv_get("nx1") == "v"
+        assert 0 < fake_redis.ttl("nx1") <= 60
+
 
 class TestRatelimit:
     def test_limited_after_threshold(self, fake_redis):
@@ -81,6 +88,13 @@ class TestRatelimit:
         old = int(time.time()) - 3600
         assert store.ratelimit_check("ru2", send_time=old, max_per_window=1) is False
         assert store.ratelimit_check("ru2", max_per_window=1) is False
+
+    def test_same_second_messages_all_counted(self, fake_redis):
+        """同秒多条消息：member 带唯一后缀，不互相覆盖，计数正确"""
+        now = int(time.time())
+        assert store.ratelimit_check("ru3", send_time=now, max_per_window=2) is False
+        assert store.ratelimit_check("ru3", send_time=now, max_per_window=2) is False
+        assert store.ratelimit_check("ru3", send_time=now, max_per_window=2) is True
 
 
 class TestRedisDownFallback:

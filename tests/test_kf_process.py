@@ -1,11 +1,12 @@
 """微信客服消息处理 — 去重/失败回滚/隐私告知/人工接待 行为测试"""
 
+import json
 import time
 
 from src import core
 from src.ai import store
 from src.core import process_kf_messages, process_message
-from src.wecom.types import TextMessage
+from src.wecom.types import TextMessage, EventMessage
 
 KFID = "wkBpRSVwAA_pArJA-t5WEOLTlS1PB1FQ"
 
@@ -50,6 +51,35 @@ class TestDedupBeforeRateLimit:
         process_kf_messages("t2", KFID)
 
         assert sent == ["您的消息发送过于频繁，请稍后再试。"]
+
+
+class TestRateLimitOrder:
+    """限流顺序：人工接待判断先于限流；转人工诉求豁免限流"""
+
+    def test_state3_no_ratelimit_prompt(self, monkeypatch):
+        """人工接待中（state=3）触发限流也不发限流提示（机器人不插嘴）"""
+        sent = []
+        _patch_common(monkeypatch, sent, state=3)
+        monkeypatch.setattr("src.core.check_rate_limit", lambda uid, t=0: True)
+        _patch_sync(monkeypatch, [_text_msg("m-rl-st3", euid="u-rl-st3")])
+
+        process_kf_messages("t1", KFID)
+        assert sent == []
+
+    def test_ratelimited_user_can_transfer(self, monkeypatch):
+        """被限流用户发「转人工」：豁免限流直接转，不被限流提示拦截"""
+        sent, transfers = [], []
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr("src.core.check_rate_limit", lambda uid, t=0: True)
+        monkeypatch.setattr(
+            "src.core._handle_kf_transfer",
+            lambda kfid, uid, candidates, ctx="": transfers.append(uid) or True,
+        )
+        _patch_sync(monkeypatch, [_text_msg("m-rl-tr", content="转人工", euid="u-rl-tr")])
+
+        process_kf_messages("t1", KFID)
+        assert transfers == ["u-rl-tr"]
+        assert "您的消息发送过于频繁，请稍后再试。" not in sent
 
 
 class TestFailureRelease:
@@ -271,3 +301,145 @@ class TestTransferredMarker:
         _patch_sync(monkeypatch, [_text_msg("m-tmark-2", content="还在吗", euid="u-tmark")])
         process_kf_messages("t2", KFID)
         assert calls["n"] == 0
+
+
+class TestEventMessageDedup:
+    def test_enter_agent_replay_dedup(self):
+        """公众号事件无 MsgId：同 create_time 的重推不重复发欢迎语"""
+        msg = EventMessage(from_user="wx-ev-1", event="enter_agent", create_time="1700000000")
+        assert process_message(msg) is not None
+        assert process_message(msg) is None
+
+    def test_different_create_time_still_replies(self):
+        """不同 create_time 视为新事件，仍回复欢迎语"""
+        first = EventMessage(from_user="wx-ev-2", event="enter_agent", create_time="1700000000")
+        second = EventMessage(from_user="wx-ev-2", event="enter_agent", create_time="1700000060")
+        assert process_message(first) is not None
+        assert process_message(second) is not None
+
+
+class TestServiceHour:
+    def test_zero_start_hour_is_valid(self, monkeypatch):
+        """SERVICE_START_HOUR=0 是合法值，不应被 or 兜底吞掉"""
+        monkeypatch.setattr(core.config, "SERVICE_START_HOUR", 0)
+        assert core._service_hour("SERVICE_START_HOUR", 10) == 0
+
+    def test_invalid_value_falls_back(self, monkeypatch):
+        """非法配置值落默认值"""
+        monkeypatch.setattr(core.config, "SERVICE_START_HOUR", "abc")
+        assert core._service_hour("SERVICE_START_HOUR", 10) == 10
+
+    def test_missing_uses_default(self, monkeypatch):
+        monkeypatch.delattr(core.config, "SERVICE_START_HOUR", raising=False)
+        assert core._service_hour("SERVICE_START_HOUR", 10) == 10
+
+
+class TestOrderFlowProcess:
+    """订单查询引导流程：退出关键词/重试上限/渠道长度/转接失败上下文保留"""
+
+    def _setup(self, monkeypatch, sent: list, transfer_ok: bool = True) -> list:
+        """公共 mock；返回转人工调用记录（元素为并入的上下文文本）"""
+        transfers = []
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr(
+            "src.core._handle_kf_transfer",
+            lambda kfid, uid, candidates, ctx="": transfers.append(ctx) or transfer_ok,
+        )
+        return transfers
+
+    def _flow_key(self, euid: str) -> str:
+        return f"orderflow:{KFID}:{euid}"
+
+    def test_exit_keyword_cancels_flow(self, monkeypatch):
+        """流程中回复「算了」：删除流程状态并确认退出"""
+        sent = []
+        self._setup(monkeypatch, sent)
+        euid = "u-of-exit"
+        _patch_sync(monkeypatch, [_text_msg("m-of-e1", content="查订单", euid=euid)])
+        process_kf_messages("t1", KFID)
+        assert store.kv_get(self._flow_key(euid))
+
+        _patch_sync(monkeypatch, [_text_msg("m-of-e2", content="算了", euid=euid)])
+        process_kf_messages("t2", KFID)
+        assert store.kv_get(self._flow_key(euid)) == ""
+        assert any("已取消订单查询" in s for s in sent)
+
+    def test_orderno_retry_limit_exits(self, monkeypatch):
+        """订单号 3 次未识别：自动退出流程并提示可重试"""
+        sent = []
+        self._setup(monkeypatch, sent)
+        euid = "u-of-retry"
+        _patch_sync(monkeypatch, [
+            _text_msg("m-of-r1", content="查订单", euid=euid),
+            _text_msg("m-of-r2", content="小红书", euid=euid),
+        ])
+        process_kf_messages("t1", KFID)
+        assert json.loads(store.kv_get(self._flow_key(euid)))["step"] == "orderno"
+
+        for i in range(3):
+            _patch_sync(monkeypatch, [_text_msg(f"m-of-rb{i}", content="不知道", euid=euid)])
+            process_kf_messages(f"tb{i}", KFID)
+
+        assert store.kv_get(self._flow_key(euid)) == ""
+        assert any("重新开始" in s for s in sent)
+
+    def test_channel_too_long_rejected(self, monkeypatch):
+        """渠道输入超长（>20 字符）不采信，按无效输入处理、流程不推进"""
+        sent = []
+        self._setup(monkeypatch, sent)
+        euid = "u-of-long"
+        _patch_sync(monkeypatch, [
+            _text_msg("m-of-l1", content="查订单", euid=euid),
+            _text_msg("m-of-l2", content="我在一个特别特别长的平台名字上面买的这个东西啊", euid=euid),
+        ])
+        process_kf_messages("t1", KFID)
+
+        assert json.loads(store.kv_get(self._flow_key(euid)))["step"] == "channel"
+        assert any("没看懂您说的购买渠道" in s for s in sent)
+
+    def test_transfer_failure_keeps_context(self, monkeypatch):
+        """收集齐后转人工失败：订单流程上下文保留，稍后可重试"""
+        sent = []
+        transfers = self._setup(monkeypatch, sent, transfer_ok=False)
+        euid = "u-of-keep"
+        _patch_sync(monkeypatch, [
+            _text_msg("m-of-k1", content="查订单", euid=euid),
+            _text_msg("m-of-k2", content="小红书", euid=euid),
+            _text_msg("m-of-k3", content="订单号1234567890", euid=euid),
+        ])
+        process_kf_messages("t1", KFID)
+
+        assert len(transfers) == 1
+        assert "1234567890" in transfers[0]
+        assert store.kv_get(self._flow_key(euid))
+
+    def test_transfer_success_clears_context(self, monkeypatch):
+        """收集齐后转人工成功：订单流程上下文清理"""
+        sent = []
+        transfers = self._setup(monkeypatch, sent, transfer_ok=True)
+        euid = "u-of-clear"
+        _patch_sync(monkeypatch, [
+            _text_msg("m-of-c1", content="查订单", euid=euid),
+            _text_msg("m-of-c2", content="小红书", euid=euid),
+            _text_msg("m-of-c3", content="订单号1234567890", euid=euid),
+        ])
+        process_kf_messages("t1", KFID)
+
+        assert len(transfers) == 1
+        assert store.kv_get(self._flow_key(euid)) == ""
+
+    def test_keyword_transfer_failure_keeps_flow_context(self, monkeypatch):
+        """流程中直接发「转人工」且转接失败：流程上下文同样保留"""
+        sent = []
+        transfers = self._setup(monkeypatch, sent, transfer_ok=False)
+        euid = "u-of-kw"
+        _patch_sync(monkeypatch, [
+            _text_msg("m-of-w1", content="查订单", euid=euid),
+            _text_msg("m-of-w2", content="小红书", euid=euid),
+            _text_msg("m-of-w3", content="转人工", euid=euid),
+        ])
+        process_kf_messages("t1", KFID)
+
+        assert len(transfers) == 1
+        assert "购买渠道：小红书" in transfers[0]
+        assert store.kv_get(self._flow_key(euid))

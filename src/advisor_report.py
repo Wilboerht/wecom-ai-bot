@@ -24,6 +24,10 @@ SCENE_PARAM_RE = re.compile(r"^[0-9A-Za-z\-]{8,128}$")
 
 _TIMEOUT = 5.0
 
+
+class ReportFetchRetryableError(Exception):
+    """报告拉取的可重试失败（网络异常/5xx）：上层按失败处理，允许企微重推后重试"""
+
 # 由测肤报告管理的档案字段（build_profile_fields 可能产生的全部 key）。
 # 新报告到达时先清理这些 key 再写入，防止第二次测肤后旧报告的字段残留
 #（如第一次有过敏史、第二次未作答，旧 ⚠️ 过敏史不应继续留在档案里）。
@@ -46,7 +50,8 @@ def _mask_session(session_id: str) -> str:
 
 def _fetch_report(session_id: str) -> dict | None:
     """调 skin-advisor 内部接口拉取报告摘要，失败返回 None。
-    超时/网络异常/5xx 重试 1 次（退避 1s），404 等客户端错误不重试。"""
+    超时/网络异常/5xx 重试 1 次（退避 1s），重试耗尽抛 ReportFetchRetryableError；
+    404 等客户端错误不重试，返回 None（终态）。"""
     global _no_api_key_warned
     if not config.INTERNAL_API_KEY or not config.ADVISOR_REPORT_API_URL:
         if not _no_api_key_warned:
@@ -68,7 +73,7 @@ def _fetch_report(session_id: str) -> dict | None:
                 time.sleep(1)
                 continue
             logger.warning("report-summary 请求失败: %s", e)
-            return None
+            raise ReportFetchRetryableError(str(e))
         if resp.status_code == 200:
             break
         # 5xx 重试一次；4xx（如 404 报告不存在）不重试
@@ -77,11 +82,17 @@ def _fetch_report(session_id: str) -> dict | None:
             time.sleep(1)
             continue
         logger.warning("report-summary 返回 %s: user session=%s", resp.status_code, _mask_session(session_id))
+        if resp.status_code >= 500:
+            raise ReportFetchRetryableError(f"status {resp.status_code}")
         return None
     try:
         data = resp.json()
     except Exception as e:
         logger.warning("report-summary 解析失败: %s", e)
+        return None
+    if not isinstance(data, dict):
+        # 上游异常返回数组/标量等非对象 JSON：按失败处理但不崩
+        logger.warning("report-summary 返回非对象 JSON: type=%s", type(data).__name__)
         return None
     if not data.get("found"):
         return None
@@ -99,8 +110,10 @@ def build_profile_fields(report: dict) -> dict:
     if report.get("skinTypeLabel"):
         fields["肤质"] = str(report["skinTypeLabel"])
     gender = report.get("gender")
-    if gender:
-        fields["性别"] = "男" if gender == "male" else "女"
+    # 白名单：male→男、female→女，其他值不写字段
+    gender_label = {"male": "男", "female": "女"}.get(gender)
+    if gender_label:
+        fields["性别"] = gender_label
     skin_age = report.get("skinAge")
     if isinstance(skin_age, (int, float)):
         fields["肌肤年龄"] = f"{int(skin_age)}岁"
@@ -196,11 +209,14 @@ def _report_date(report: dict) -> datetime:
     raw = report.get("createdAt")
     if isinstance(raw, str):
         try:
-            return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(
-                ZoneInfo("Asia/Shanghai")
-            )
+            dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
         except ValueError:
             pass
+        else:
+            # naive 时间（无时区偏移）按中国时区解释，再统一转中国时区
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+            return dt.astimezone(ZoneInfo("Asia/Shanghai"))
     return datetime.now(ZoneInfo("Asia/Shanghai"))
 
 
@@ -211,7 +227,8 @@ def build_welcome_text(report: dict) -> str:
     测肤时间优先用接口返回的 createdAt，旧版接口没有该字段时兜底为当天日期。
     问卷字段缺失时显示「暂未填写」，引导用户补充。
     """
-    nickname = str(report.get("nickname") or "").strip()
+    # nickname 清洗：去换行、截断 32 字符，防空/超长昵称撑爆企微 2048 字节上限
+    nickname = re.sub(r"[\r\n]+", "", str(report.get("nickname") or "")).strip()[:32]
     gender = report.get("gender")
     title = {"male": "先生", "female": "女士"}.get(gender, "")
     if nickname:
@@ -246,71 +263,93 @@ def build_welcome_text(report: dict) -> str:
     return "\n".join(lines)
 
 
-# 补发去重标记 TTL：7 天（远长于测肤会话的有效期，同一份报告不会重复补发）
+# 欢迎语去重标记 TTL：7 天（远长于测肤会话的有效期，同一份报告不会重复发送）
 _WELCOME_FALLBACK_TTL = 7 * 24 * 3600
+# 标记 key 前缀与 store 的 PII 导出/删除扫描保持一致（按用户键控，可随用户数据清除）
+_WELCOME_FALLBACK_PREFIX = "welcome-fallback:"
 
 
-def _welcome_fallback_marked(open_kfid: str, external_userid: str, scene_param: str) -> bool:
-    """同一份报告（scene_param）只补发一次欢迎语；首次调用写入标记并返回 False"""
-    key = f"welcome-fallback:{open_kfid}:{external_userid}:{scene_param}"
-    if store.kv_get(key):
-        return True
-    store.kv_set(key, "1", _WELCOME_FALLBACK_TTL)
-    return False
+def _send_welcome(open_kfid: str, external_userid: str, scene_param: str, event: dict, report: dict) -> None:
+    """个性化欢迎语：优先用 welcome_code（微信事件响应消息，仅 48h 内未收过欢迎语且
+    用户未发过消息时才下发），缺失或发送失败时降级普通 send_msg 再试一次——
+    降级路径仅当用户在 48h 会话窗口内（之前发过消息）才能送达，送达失败属平台限制。
+
+    去重：两条路径共用同一个 per-(用户, scene_param) 标记，发送前 kv_set_nx 原子 claim，
+    任一路径成功即占用；全部失败释放标记，允许下次事件重试。
+    """
+    key = f"{_WELCOME_FALLBACK_PREFIX}{open_kfid}:{external_userid}:{scene_param}"
+    if not store.kv_set_nx(key, "1", _WELCOME_FALLBACK_TTL):
+        # 同一份报告已发过，避免用户重复点链接被刷屏
+        return
+    content = build_welcome_text(report)
+    ok = False
+    welcome_code = (event.get("welcome_code") or "").strip()
+    if welcome_code:
+        try:
+            from .wecom.wxkf import send_msg_on_event
+
+            ok = send_msg_on_event(
+                corpid=config.WECOM_CORP_ID,
+                secret=config.WECOM_SECRET,
+                code=welcome_code,
+                content=content,
+            )
+        except Exception as e:
+            logger.warning("Welcome 发送失败: %s", e)
+    if not ok:
+        # welcome_code 缺失或发送失败：降级普通 send_msg 再试一次
+        try:
+            from .wecom.wxkf import send_message
+
+            ok = send_message(
+                corpid=config.WECOM_CORP_ID,
+                secret=config.WECOM_SECRET,
+                to_user=external_userid,
+                open_kfid=open_kfid,
+                msgtype="text",
+                content=content,
+            )
+        except Exception as e:
+            logger.warning("Welcome 补发失败: %s", e)
+    if ok:
+        logger.info("Welcome sent: user=%s session=%s", external_userid, _mask_session(scene_param))
+    else:
+        # 全部失败：释放标记，允许下次事件重试
+        store.kv_delete(key)
 
 
-def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> None:
-    """进入会话事件：拉取报告写档案，可选发欢迎语"""
+def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> bool:
+    """进入会话事件：拉取报告写档案，可选发欢迎语。
+
+    返回 True 表示处理完成或明确无需处理（无 scene_param、报告不存在等终态——
+    404 是终态不算失败）；返回 False 表示可重试失败（网络/5xx 拉取失败、
+    档案写入异常），调用方应回滚 msgid 认领，允许企微重推后重试。
+    """
     scene_param = (event.get("scene_param") or "").strip()
     if not SCENE_PARAM_RE.match(scene_param):
-        return
+        return True
 
-    report = _fetch_report(scene_param)
+    try:
+        report = _fetch_report(scene_param)
+    except ReportFetchRetryableError:
+        return False
     if not report:
-        return
+        return True
 
     fields = build_profile_fields(report)
     if not fields:
-        return
+        return True
 
     # 先清理报告管理的旧字段再合并（单次 SET 原子完成）：同一用户第二次测肤时，
     # 旧报告中存在而新报告缺失的字段（过敏史/重点问题等）不应残留
-    store.profile_replace_report_keys(open_kfid, external_userid, REPORT_MANAGED_KEYS, fields)
+    try:
+        store.profile_replace_report_keys(open_kfid, external_userid, REPORT_MANAGED_KEYS, fields)
+    except Exception as e:
+        logger.warning("报告档案写入失败: %s", e)
+        return False
     logger.info("Report profile saved: user=%s session=%s fields=%s", external_userid, _mask_session(scene_param), list(fields))
 
-    # 欢迎语：优先用 welcome_code（微信事件响应消息，仅 48h 内未收过欢迎语且
-    # 用户未发过消息时才下发）。无 welcome_code 时退化为普通 send_msg 补发——
-    # 仅当用户在 48h 会话窗口内（之前发过消息）才能送达，送达失败属平台限制，不重试。
-    # 同一份报告（scene_param）只补发一次，避免用户重复点链接被刷屏。
+    # 欢迎语：报告存在才发送；发送失败不视为处理失败（标记已释放，下次事件可重试）
     if config.KF_SEND_WELCOME:
-        welcome_code = (event.get("welcome_code") or "").strip()
-        if welcome_code:
-            try:
-                from .wecom.wxkf import send_msg_on_event
-
-                ok = send_msg_on_event(
-                    corpid=config.WECOM_CORP_ID,
-                    secret=config.WECOM_SECRET,
-                    code=welcome_code,
-                    content=build_welcome_text(report),
-                )
-                if ok:
-                    logger.info("Welcome sent: user=%s", external_userid)
-            except Exception as e:
-                logger.warning("Welcome 发送失败: %s", e)
-        elif not _welcome_fallback_marked(open_kfid, external_userid, scene_param):
-            try:
-                from .wecom.wxkf import send_message
-
-                ok = send_message(
-                    corpid=config.WECOM_CORP_ID,
-                    secret=config.WECOM_SECRET,
-                    to_user=external_userid,
-                    open_kfid=open_kfid,
-                    msgtype="text",
-                    content=build_welcome_text(report),
-                )
-                if ok:
-                    logger.info("Welcome fallback sent: user=%s session=%s", external_userid, _mask_session(scene_param))
-            except Exception as e:
-                logger.warning("Welcome 补发失败: %s", e)
+        _send_welcome(open_kfid, external_userid, scene_param, event, report)
+    return True

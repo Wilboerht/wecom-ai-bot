@@ -18,7 +18,11 @@ def parse_encrypted_xml(xml_data: str) -> dict:
 
 
 def parse_message_xml(xml_data: str) -> Message:
-    """解析解密后的消息 XML"""
+    """解析解密后的消息 XML
+
+    异常契约：XML 畸形时原样抛出 xml.etree.ElementTree.ParseError（ET.ParseError），
+    本函数不做局部捕获；调用方需自行 try/except 并按处理失败降级。
+    """
     root = ET.fromstring(xml_data)
 
     msg_type = root.findtext("MsgType", "")

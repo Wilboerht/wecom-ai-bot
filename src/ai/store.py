@@ -7,6 +7,7 @@ Redis 运行期故障时自动降级内存模式，并每 60 秒尝试重连恢�
 import json
 import logging
 import time
+from uuid import uuid4
 from ..config import config
 
 logger = logging.getLogger(__name__)
@@ -193,7 +194,9 @@ def ratelimit_check(user_id: str, send_time: int = 0, max_per_window: int = 30, 
             count = r.zcard(key)
             if count >= max_per_window:
                 return True
-            r.zadd(key, {str(send_time or now): send_time or now})
+            ts = send_time or now
+            # member 带唯一后缀：同秒多条消息不互相覆盖（score 仍是时间戳，zcard 语义不变）
+            r.zadd(key, {f"{ts}:{uuid4().hex[:8]}": ts})
             r.expire(key, window_secs * 2)
             return False
         except Exception as e:
@@ -258,6 +261,8 @@ def transfer_pick_agent(open_kfid: str, candidates: list, preferred: str = "") -
                     best_load = load
                     best = agent
             r.incr(f"{_LOAD_PREFIX}{open_kfid}:{best}")
+            # 计数键加 TTL，缓解长期不清理造成的永久堆积
+            r.expire(f"{_LOAD_PREFIX}{open_kfid}:{best}", 86400)
             return best
         except Exception as e:
             _redis_down(e)
@@ -276,7 +281,8 @@ def _get_agent_load(r, open_kfid: str, agent: str) -> int:
 
 
 def transfer_complete(open_kfid: str, agent: str) -> None:
-    """接待完成，减少该接待人员的负载计数"""
+    """接待完成，减少该接待人员的负载计数。
+    注意：当前无调用方（保留待用）；负载计数键靠 transfer_pick_agent 里的 TTL 自然过期"""
     r = _get_redis()
     if r:
         try:
@@ -434,6 +440,22 @@ def kv_set(key: str, value: str, ttl: int = 600) -> None:
     _inmem_kv[key] = (value, time.time() + ttl)
 
 
+def kv_set_nx(key: str, value: str, ttl: int = 600) -> bool:
+    """键不存在才写入（Redis SET NX EX），返回是否占用成功。供一次性标记（如欢迎语去重）用。
+    内存模式为 check-then-set（单进程 GIL 下可接受）"""
+    r = _get_redis()
+    if r:
+        try:
+            return bool(r.set(key, value, nx=True, ex=ttl))
+        except Exception as e:
+            _redis_down(e)
+    item = _inmem_kv.get(key)
+    if item and item[1] > time.time():
+        return False
+    _inmem_kv[key] = (value, time.time() + ttl)
+    return True
+
+
 def kv_get(key: str) -> str:
     """读取键值，不存在或已过期返回空串"""
     r = _get_redis()
@@ -496,7 +518,7 @@ def privacy_notice_accept(open_kfid: str, external_userid: str) -> None:
 #   privacy:{kfid}:{euid}              隐私告知确认标记 STRING（365 天）
 #   orderflow:{kfid}:{euid}            订单查询流程状态 kv（600s）
 #   kf:transferred:{kfid}:{euid}       转人工跨批次标记 kv（300s）
-#   welcome-fallback:{kfid}:{euid}:*   欢迎语补发去重 kv（7 天，按报告 scene_param）
+#   welcome-fallback:{kfid}:{euid}:*   欢迎语去重 kv（7 天，按报告 scene_param）
 #   agent:{euid}                       用户→上次接待人绑定 STRING（30 天，不带 kfid）
 #   rl:{euid}                          限流时间戳 ZSET（约 120s，不带 kfid）
 # 明确不覆盖：kf:msgid:{msgid} 去重键按消息而非按用户存储，无法按用户枚举，1800s 自然过期。

@@ -17,7 +17,7 @@ import re
 
 logger = logging.getLogger(__name__)
 
-# filepath -> (文件 mtime, 格式化后的知识文本)
+# filepath -> (文件 mtime, 格式化后的知识文本)；文件缺失时 mtime 记 None 表示空知识库
 _knowledge_cache: dict[str, tuple[float, str]] = {}
 
 
@@ -29,7 +29,12 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
     2. 其他非注释行 — 原样保留（如产品速查表、禁语表）
     """
     if not os.path.exists(filepath):
+        # 缺失也缓存（mtime 记 None）：只 warn 一次不刷屏；文件出现后走热加载
+        cached = _knowledge_cache.get(filepath)
+        if cached and cached[0] is None:
+            return cached[1]
         logger.warning("知识库文件未找到: %s, 使用空知识库", filepath)
+        _knowledge_cache[filepath] = (None, "")
         return ""
 
     # 热加载: mtime 未变直接返回缓存, 变了则重新解析
@@ -43,46 +48,60 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
     current_q = ""
     current_a = ""
 
-    with open(filepath, "r", encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
 
-            # 空行: 结束上一条答案（续行不再并入）
-            if not line:
-                if current_q and current_a:
-                    entries.append((current_q, current_a))
-                    current_q = ""
+                # 空行: 结束上一条答案（续行不再并入）
+                if not line:
+                    if current_q and current_a:
+                        entries.append((current_q, current_a))
+                        current_q = ""
+                        current_a = ""
+                    continue
+
+                # 跳过注释和分隔线
+                if line.startswith("#") or line.startswith("="):
+                    continue
+
+                if line.startswith("Q:") or line.startswith("Q："):
+                    # 保存上一条
+                    if current_q and current_a:
+                        entries.append((current_q, current_a))
+                    current_q = line[2:].strip()
                     current_a = ""
-                continue
-
-            # 跳过注释和分隔线
-            if line.startswith("#") or line.startswith("="):
-                continue
-
-            if line.startswith("Q:") or line.startswith("Q："):
-                # 保存上一条
-                if current_q and current_a:
-                    entries.append((current_q, current_a))
-                current_q = line[2:].strip()
-                current_a = ""
-            elif line.startswith("A:") or line.startswith("A："):
-                # 收集答案（支持多行）
-                if current_a:
-                    current_a += "\n" + line[2:].strip()
+                elif line.startswith("A:") or line.startswith("A："):
+                    # 收集答案（支持多行）
+                    if current_a:
+                        current_a += "\n" + line[2:].strip()
+                    else:
+                        current_a = line[2:].strip()
+                elif current_a:
+                    # 续行（多行答案的继续, 直到空行或下一条 Q:）
+                    current_a += "\n" + line
                 else:
-                    current_a = line[2:].strip()
-            elif current_a:
-                # 续行（多行答案的继续, 直到空行或下一条 Q:）
-                current_a += "\n" + line
-            else:
-                # 非问答内容（如产品速查表）— 原样保留
-                raw_lines.append(line)
+                    # 非问答内容（如产品速查表）— 原样保留
+                    raw_lines.append(line)
+    except OSError as e:
+        # 文件被占用/权限异常：有旧缓存沿用旧缓存，无缓存返回空知识库
+        cached = _knowledge_cache.get(filepath)
+        if cached:
+            logger.error("知识库读取失败: %s（沿用旧缓存）", e)
+            return cached[1]
+        logger.error("知识库读取失败: %s（无缓存，使用空知识库）", e)
+        return ""
 
     # 保存最后一条
     if current_q and current_a:
         entries.append((current_q, current_a))
 
     if not entries and not raw_lines:
+        # 解析结果为空可能是文件写到一半被读到：有旧缓存沿用，不用空结果覆盖
+        cached = _knowledge_cache.get(filepath)
+        if cached:
+            logger.warning("知识库解析结果为空（文件可能正在写入），沿用旧缓存: %s", filepath)
+            return cached[1]
         logger.warning("知识库文件为空或无有效条目")
         return ""
 

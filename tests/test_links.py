@@ -68,6 +68,24 @@ class TestLoadLinks:
         assert result == {"a": "https://example.com/a"}
         assert any("加载失败" in r.message for r in caplog.records)
 
+    def test_non_dict_json_keeps_last_good_cache(self, tmp_path, caplog):
+        """合法 JSON 但顶层非对象（如数组）按加载失败处理：保旧缓存、不更新 mtime"""
+        f = tmp_path / "links.json"
+        _write(f, {"a": "https://example.com/a"})
+        os.utime(f, (1000, 1000))
+        load_links(str(f))
+
+        f.write_text(json.dumps(["not", "a", "dict"]), encoding="utf-8")
+        os.utime(f, (2000, 2000))
+        with caplog.at_level(logging.ERROR, logger="src.links"):
+            result = load_links(str(f))
+        assert result == {"a": "https://example.com/a"}
+        assert any("加载失败" in r.message for r in caplog.records)
+        # mtime 未更新：修复文件后仍可热加载
+        _write(f, {"b": "https://example.com/b"})
+        os.utime(f, (3000, 3000))
+        assert load_links(str(f)) == {"b": "https://example.com/b"}
+
     def test_get_target_triggers_hot_reload(self, tmp_path):
         """读取路径上自动热加载：改文件后 get_target 立即生效"""
         f = tmp_path / "links.json"
