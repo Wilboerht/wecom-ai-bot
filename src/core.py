@@ -542,24 +542,10 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             session_key = f"{open_kfid}:{external_userid}"
             history = store.session_get(session_key)
 
-            # 注入用户档案
+            # 注入用户档案（key 白名单/截断防护 + 阶段状态块 + 复评日检测，见 build_profile_block；
+            # 与 golden 测试用例共用同一函数保证行为一致）
             profile = store.profile_get(open_kfid, external_userid)
-            profile_text = ""
-            if profile:
-                parts = []
-                for k, v in profile.items():
-                    # 档案 key/value 来自 AI 回复的 [档案:...] 标签（间接注入面）：
-                    # 拼进 prompt 前 key 做白名单校验、value 去换行并截断，防止伪造 system 指令。
-                    # 防御纵深：即使 Redis 里已残留脏 key 也不会进入 prompt
-                    k = str(k).strip()
-                    if not _PROFILE_KEY_RE.match(k):
-                        logger.warning("档案 key 非法已跳过: user=%s key=%r", external_userid, k)
-                        continue
-                    v = " ".join(str(v).split())[:100]
-                    if not v:
-                        continue
-                    parts.append(f"{k}: {v}")
-                profile_text = "【该用户的护肤档案】" + "；".join(parts) + "。依据档案个性化推荐，如档案信息变化请在回复末尾建议更新。"
+            profile_text = build_profile_block(profile, external_userid)
 
             # 品牌客服知识库按需路由 + 注入防护（声明+定界符）
             messages = [{"role": "system", "content": build_system_content(open_kfid, user_text, history) + profile_text}]
@@ -887,6 +873,84 @@ _PROFILE_TAG_RE = re.compile(r'[\[【]档案[:：]\s*([^\]】]+)[\]】]')
 _PROFILE_TAG_TAIL_RE = re.compile(r'[\[【]档案[:：][^\]】\n]*$', re.MULTILINE)
 
 
+# ---- 阶段目标管理 ----
+# 阶段字段由模型通过 [档案: ...] 标签写入，代码层只做结构性校验（日期必须真实 YYYY-MM-DD）；
+# 阶段名不做词表白名单（阶段名随客户诉求变化，写死会僵化）；晋级/留级/回退裁决归模型 prompt 规则。
+_STAGE_KEYS = ("当前阶段", "阶段目标", "阶段开始", "晋级条件")
+_STAGE_DATE_KEYS = ("阶段开始", "随访时间")
+
+
+def _valid_stage_date(value: str) -> bool:
+    """日期字段必须是真实的 YYYY-MM-DD（2025-13-99 也拒绝）；模型写日期不可靠，代码层严格把关"""
+    try:
+        datetime.strptime(value.strip(), "%Y-%m-%d")
+        return True
+    except (ValueError, AttributeError):
+        return False
+
+
+def _validate_stage_fields(fields: dict) -> dict:
+    """写入档案前校验阶段字段：日期字段非法则剔除（坏数据不进档案）并计数，其余字段原样放行"""
+    for key in _STAGE_DATE_KEYS:
+        value = fields.get(key)
+        if value is not None and not _valid_stage_date(str(value)):
+            logger.warning("阶段日期字段非法已剔除: key=%r value=%r", key, value)
+            metrics.inc(metrics.STAGE_FIELD_INVALID)
+            fields.pop(key)
+    return fields
+
+
+def build_profile_block(profile: dict | None, user_id: str = "") -> str:
+    """组装档案注入文本：基础字段 + 阶段状态块 + 复评日确定性指令。
+
+    生产 kf 链路与 golden 测试用例共用本函数。档案 key/value 来自 AI 回复的 [档案:...]
+    标签（间接注入面）：拼进 prompt 前 key 做白名单校验、value 去换行并截断，防止伪造
+    system 指令；防御纵深——即使 Redis 里已残留脏 key 也不会进入 prompt。
+    """
+    if not profile:
+        return ""
+    parts = []
+    for k, v in profile.items():
+        k = str(k).strip()
+        if not _PROFILE_KEY_RE.match(k):
+            logger.warning("档案 key 非法已跳过: user=%s key=%r", user_id, k)
+            continue
+        if k in _STAGE_KEYS:
+            continue  # 阶段字段在【当前阶段状态】块单独渲染，避免重复注入
+        v = " ".join(str(v).split())[:100]
+        if not v:
+            continue
+        parts.append(f"{k}: {v}")
+    if not parts:
+        return ""
+    text = "【该用户的护肤档案】" + "；".join(parts) + "。依据档案个性化推荐，如档案信息变化请在回复末尾建议更新。"
+
+    # 阶段状态块：档案含阶段字段才输出（实际只有护肤顾问会积累）
+    stage_parts = []
+    for key in _STAGE_KEYS:
+        v = profile.get(key)
+        v = " ".join(str(v).split())[:100] if v is not None else ""
+        if v:
+            stage_parts.append(f"{key}={v}")
+    if stage_parts:
+        text += "\n【当前阶段状态】" + "；".join(stage_parts)
+
+    # 复评到期检测：代码算日期（Asia/Shanghai），随访时间不晚于今天则输出确定性指令，
+    # 不依赖模型自行比较日期；日期非法视为未到期，不崩溃。
+    # 不要求阶段字段存在：老客档案只有上次方案+随访时间时，复评标记是老客迁移规则的触发入口
+    follow = str(profile.get("随访时间") or "").strip()
+    if _valid_stage_date(follow):
+        due = datetime.strptime(follow, "%Y-%m-%d").date()
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        if due <= today:
+            text += (
+                "\n【系统指令，优先级最高，覆盖寒暄规则】今天是阶段复评日："
+                "即使用户只是打招呼，也必须先执行阶段复评裁决（晋级/留级/回退），"
+                "禁止只回复寒暄。"
+            )
+    return text
+
+
 def _save_profile_from_reply(open_kfid: str, external_userid: str, reply: str) -> str:
     """从AI回复中提取所有[档案: key=value, ...]标记（兼容全角【档案：…】），合并存入Redis，
     返回清理后的文本（含剥除未闭合的尾部标记片段，保证档案语法任何情况下都不到达用户）"""
@@ -896,6 +960,9 @@ def _save_profile_from_reply(open_kfid: str, external_userid: str, reply: str) -
         for part in re.split(r'[,;，；]', match.group(1)):
             pair = part.split('=', 1)
             if len(pair) != 2:
+                # 无 = 的残片：正常不会出现，出现即提示模型在字段值里用了逗号（标签按逗号拆字段，值含逗号会截断）
+                if part.strip():
+                    logger.warning("档案标签残片疑似值内逗号截断: user=%s part=%r", external_userid, part.strip())
                 continue
             k, v = pair[0].strip(), pair[1].strip()
             if not k or not v:
@@ -909,6 +976,8 @@ def _save_profile_from_reply(open_kfid: str, external_userid: str, reply: str) -
     reply = _PROFILE_TAG_RE.sub(_collect, reply)
     # 剥掉残留的未闭合标记片段（如被 max_tokens 截断）
     reply = _PROFILE_TAG_TAIL_RE.sub("", reply)
+    # 阶段字段结构性校验（非法日期剔除），晋级/留级裁决本身归模型
+    _validate_stage_fields(fields)
     if fields:
         store.profile_update(open_kfid, external_userid, fields)
         logger.info("Profile saved: user=%s fields=%s", external_userid, list(fields))

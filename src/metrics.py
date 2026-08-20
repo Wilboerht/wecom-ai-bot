@@ -31,6 +31,7 @@ ORDERFLOW_STARTED = "orderflow_started"      # 订单查询流程进入数
 ORDERFLOW_COMPLETED = "orderflow_completed"  # 订单流程收集齐并成功转人工数
 BANNED_SANITIZED = "banned_reply_sanitized"  # 输出侧禁语命中替换次数
 WX_BUDGET_TIMEOUT = "wx_budget_timeout"      # 公众号路径 AI 超出 5s 响应预算返回兜底次数
+STAGE_FIELD_INVALID = "stage_field_invalid"  # 阶段字段（日期格式）校验失败剔除次数
 
 
 def inc(name: str, n: int = 1) -> None:

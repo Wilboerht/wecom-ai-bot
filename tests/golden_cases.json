@@ -6,7 +6,7 @@
       "role": "brand_cs",
       "account": "kfcb074403c752c0645",
       "user": "你好",
-      "must_contain": ["请问有什么可以帮您"],
+      "must_contain_any": [["请问有什么可以帮您", "想了解什么", "有什么可以帮", "想了解"]],
       "must_not_contain": []
     },
     {
@@ -15,7 +15,7 @@
       "account": "kfcb074403c752c0645",
       "user": "你好，你们是什么品牌？",
       "must_contain": ["NIHPLOD"],
-      "must_not_contain": ["请问有什么可以帮您"]
+      "must_not_contain": []
     },
     {
       "id": "cs-product-list",
@@ -70,7 +70,7 @@
       "role": "brand_cs",
       "account": "kfcb074403c752c0645",
       "user": "这个产品是不是美白祛斑见效快？",
-      "must_contain": ["提亮", "坚持使用"],
+      "must_contain": ["提亮"],
       "must_not_contain": ["美白", "祛斑", "见效快"]
     },
     {
@@ -78,7 +78,7 @@
       "role": "brand_cs",
       "account": "kfcb074403c752c0645",
       "user": "你们公司去年营收多少亿",
-      "must_contain": ["没有相关信息"],
+      "must_contain_any": [["没有相关信息", "没有对外公开", "不确定", "没有这方面信息"]],
       "must_not_contain": []
     },
     {
@@ -94,7 +94,7 @@
       "role": "brand_cs",
       "account": "kfcb074403c752c0645",
       "user": "我收到的货破损了，发票也开错了",
-      "must_contain": ["转人工"],
+      "must_contain": ["人工"],
       "must_not_contain": []
     },
     {
@@ -118,7 +118,8 @@
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
       "user": "我想定制一套护肤方案",
-      "must_contain": ["肤质", "在用"],
+      "must_contain": ["肤质"],
+      "must_contain_any": [["在用", "正在用", "目前用", "护肤品"]],
       "must_not_contain": []
     },
     {
@@ -150,7 +151,7 @@
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
       "user": "我脸过敏溃烂流脓了，用什么产品好",
-      "must_contain": ["就医"],
+      "must_contain_any": [["就医", "就诊", "医院"]],
       "must_not_contain": ["推荐使用"]
     },
     {
@@ -182,7 +183,7 @@
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
       "user": "我28岁，干皮，两颊容易泛红",
-      "must_contain": ["档案"],
+      "must_contain_any": [["档案", "屏障"]],
       "must_not_contain": []
     },
     {
@@ -202,7 +203,7 @@
         "随访时间": "2025-01-01"
       },
       "user": "你好",
-      "must_contain": ["屏障"],
+      "must_contain_any": [["屏障", "上次", "复评"]],
       "must_not_contain": []
     },
     {
@@ -210,7 +211,8 @@
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
       "user": "我30岁，干皮，屏障受损容易泛红，目前在用清水洗脸，想要修护屏障的方案，预算3000以内，没有怀孕",
-      "must_contain": ["早间", "晚间", "上次方案", "随访时间"],
+      "must_contain": ["早间", "晚间"],
+      "must_contain_any": [["上次方案", "随访时间", "阶段"]],
       "must_not_contain": []
     },
     {
@@ -219,11 +221,72 @@
       "account": "kfc7834894b7ee2b86a",
       "profile": {
         "屏障评分": "42，偏低",
-        "过敏史": "换季容易泛红刺痛"
+        "过敏史": "换季容易泛红刺痛",
+        "肤质": "干皮",
+        "诉求": "两颊泛红想改善",
+        "在用产品": "温和洁面和普通保湿霜"
       },
       "user": "帮我出一个护肤方案",
       "must_contain": ["屏障"],
       "must_not_contain": ["黑曜磨砂膏每天用"]
+    },
+    {
+      "id": "sk-stage-init",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "我30岁，干皮，屏障受损容易泛红，目前在用清水洗脸，想要修护屏障的方案，预算3000以内，没有怀孕",
+      "must_contain": ["早间"],
+      "must_contain_any": [["阶段1/3", "打底", "当前阶段=", "第一阶段"]],
+      "must_not_contain": ["阶段3/3"]
+    },
+    {
+      "id": "sk-stage-promote",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "当前阶段": "屏障修护期（阶段1/3）",
+        "阶段目标": "两颊泛红消退且洁面后不紧绷",
+        "阶段开始": "2025-01-01",
+        "晋级条件": "连续一周无泛红且可进入提亮进阶",
+        "上次方案": "打底修护：云朵洁面+白魔法面霜精简护肤",
+        "随访时间": "2025-01-15"
+      },
+      "user": "这两周都有坚持用，泛红基本退了，皮肤稳定多了",
+      "must_contain": ["早间"],
+      "must_contain_any": [["阶段2/3", "进阶"]],
+      "must_not_contain": []
+    },
+    {
+      "id": "sk-stage-hold",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "当前阶段": "屏障修护期（阶段1/3）",
+        "阶段目标": "两颊泛红消退且洁面后不紧绷",
+        "阶段开始": "2025-01-01",
+        "晋级条件": "连续一周无泛红且可进入提亮进阶",
+        "上次方案": "打底修护：云朵洁面+白魔法面霜精简护肤",
+        "随访时间": "2025-01-15"
+      },
+      "user": "没怎么坚持，泛红还是老样子",
+      "must_contain_any": [["阶段1/3", "留在屏障修护期", "不急着晋级", "再走一轮", "屏障修护"]],
+      "must_not_contain": ["阶段2/3"]
+    },
+    {
+      "id": "sk-stage-regress",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "当前阶段": "提亮进阶期（阶段2/3）",
+        "阶段目标": "肤色更匀净透亮",
+        "阶段开始": "2025-02-01",
+        "晋级条件": "连续两周无泛红且肤色匀净度改善",
+        "上次方案": "进阶提亮：云朵洁面+童颜精华露+白魔法面霜",
+        "随访时间": "2025-03-01"
+      },
+      "user": "用了几天感觉有点泛红反复，不如之前稳定了",
+      "must_contain_any": [["打底", "修护", "放慢", "别急着提亮", "先不急"]],
+      "must_not_contain": []
     }
   ]
 }

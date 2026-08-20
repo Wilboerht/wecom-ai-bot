@@ -12,7 +12,8 @@ import sys
 
 
 def _import_config(extra_env: dict) -> subprocess.CompletedProcess:
-    env = {**os.environ, **extra_env}
+    # 强制子进程 UTF-8 输出：中文报错在 GBK 控制台下会导致父进程 utf-8 解码失败（stdout 变 None）
+    env = {**os.environ, "PYTHONUTF8": "1", **extra_env}
     return subprocess.run(
         [sys.executable, "-c", "import src.config"],
         capture_output=True,

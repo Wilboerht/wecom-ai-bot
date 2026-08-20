@@ -14,7 +14,7 @@ import pathlib
 import pytest
 
 from src.compliance import sanitize_reply
-from src.core import build_system_content, chat, wrap_user_text
+from src.core import build_profile_block, build_system_content, chat, wrap_user_text
 
 _CASES_FILE = pathlib.Path(__file__).parent / "golden_cases.json"
 _CASES = json.loads(_CASES_FILE.read_text(encoding="utf-8"))["cases"]
@@ -28,14 +28,8 @@ pytestmark = pytest.mark.skipif(
 @pytest.mark.parametrize("case", _CASES, ids=[c["id"] for c in _CASES])
 def test_golden_case(case):
     system_content = build_system_content(case["account"], case["user"], [])
-    # 可选档案预置：与生产链路同格式拼入 system（验证回访衔接/随访兑现/报告依据）
-    profile = case.get("profile")
-    if profile:
-        parts = [f"{k}: {v}" for k, v in profile.items()]
-        system_content += (
-            "【该用户的护肤档案】" + "；".join(parts)
-            + "。依据档案个性化推荐，如档案信息变化请在回复末尾建议更新。"
-        )
+    # 可选档案预置：与生产链路同一函数（含阶段状态块与复评日检测，保证行为一致）
+    system_content += build_profile_block(case.get("profile"))
     messages = [
         {"role": "system", "content": system_content},
         {"role": "user", "content": wrap_user_text(case["user"])},
@@ -44,5 +38,9 @@ def test_golden_case(case):
 
     for kw in case.get("must_contain") or []:
         assert kw in reply, f"[{case['id']}] 回复应包含 {kw!r}，实际: {reply[:300]}"
+    for any_kws in case.get("must_contain_any") or []:
+        assert any(kw in reply for kw in any_kws), (
+            f"[{case['id']}] 回复应包含 {any_kws!r} 之一，实际: {reply[:300]}"
+        )
     for kw in case.get("must_not_contain") or []:
         assert kw not in reply, f"[{case['id']}] 回复不应包含 {kw!r}，实际: {reply[:300]}"

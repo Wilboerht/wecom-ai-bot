@@ -14,7 +14,10 @@ os.environ.setdefault("WECOM_CORP_ID", CORP_ID)
 os.environ.setdefault("WECOM_SECRET", "test_secret_1234567890")
 os.environ.setdefault("WECOM_TOKEN", TOKEN)
 os.environ.setdefault("WECOM_ENCODING_AES_KEY", AES_KEY)
-os.environ.setdefault("DEEPSEEK_API_KEY", "sk-test-1234567890")
+# RUN_GOLDEN=1 时黄金用例要调真实 LLM：不注入假 key，让 .env 里的真实 key 生效
+# （环境变量优先于 .env，假 key 会覆盖真 key 导致 401）
+if os.environ.get("RUN_GOLDEN") != "1":
+    os.environ.setdefault("DEEPSEEK_API_KEY", "sk-test-1234567890")
 
 from src.wecom.crypto import WXBizMsgCrypt
 
