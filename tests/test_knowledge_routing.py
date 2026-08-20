@@ -58,7 +58,7 @@ class TestKnowledgeRouting:
             config.get_account = orig
         assert len(routed) < len(full_cs)
         # 全量模式段标题不进输出，但产品FAQ问答条目全部在场
-        assert "云朵洁面适合敏感肌肤吗" in full_cs
+        assert "净透温和洁面慕斯（云朵洁面）适合敏感肌肤吗" in full_cs
 
     def test_skincare_account_always_full(self):
         """护肤顾问知识库小：不开 split，任何提问都全量注入（追问不丢上下文）"""

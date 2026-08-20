@@ -42,11 +42,8 @@ A: 旎柏的产品线不多，就9个单品，但每个都是用心打造，旨�
 Q: 我的聊天记录和隐私数据安全吗？
 A: 您的产品咨询和肤质分析数据仅用于提升服务质量，不会在未获您同意的情况下收集手机号、身份证等个人信息。如涉及上传图片进行分析，图片仅用于本次分析，不会被保存。
 
-Q: NIHPLOD品牌背景是什么？
-A: 2008年创立于摩纳哥，业务中心设在法国巴黎，亚太业务中心在上海。品牌名NIHPLOD倒读即DOLPHIN（海豚），灵感来自海豚皮肤每两小时自我更新的能力，核心理念是逆转时光。核心技术是与医药级机构合作研发的脂质体包裹技术。品牌理念Less, But Better（精简而更好），全系列不含酒精、无高刺激防腐剂。多款产品已完成中国NMPA备案，可到国家药监局官网查询。
-
-Q: 什么是NIHPLOD？
-A: NIHPLOD源自对海豚皮肤自我更新能力的启发——海豚每两小时更新一次皮肤，象征着时间逆转。将Dolphin反写而得NIHPLOD（发音/nɪˈplɒd/），品牌运用前沿生物技术和脂质体靶向技术，致力于为您带来逆转时光的轻悦护肤体验。
+Q: 什么是NIHPLOD？品牌背景是什么？
+A: NIHPLOD（发音/nɪˈplɒd/）由Dolphin（海豚）反写而来，灵感来自海豚皮肤每两小时自我更新的能力，核心理念是逆转时光。品牌2008年创立于摩纳哥，业务中心设在法国巴黎，亚太业务中心在上海。核心技术是与医药级机构合作研发的脂质体包裹技术，品牌理念Less, But Better（精简而更好），全系列不含酒精、无高刺激防腐剂。多款产品已完成中国NMPA备案，可到国家药监局官网查询。
 
 Q: 你们的官网是什么？
 A: 我们的中国官网是 https://nihplod.cn，您可以在官网了解品牌、产品等信息。
@@ -190,33 +187,33 @@ A: 童颜精华露是精华液，主打紧致抗初老（玻色因+胜肽+富勒
 # ============================================================
 
 Q: NIHPLOD有哪些洁面产品？
-A: 净透温和洁面慕斯（云朵洁面）￥680/100ml：氨基酸温和清洁。关键成分：烟酰胺、泛醇、透明质酸钠、扁柏水、牡丹花水。全肤质适用。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3824659499508170825&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/64b7a0c4c142780001f7e41a?xsec_token=XBkQbIwEYzYvrDQnXu0SqclIpHyv4HkAuwYkjeRa-wnCo=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F64b7a0c4c142780001f7e41a%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjRiN2EwYzRjMTQyNzgwMDAxZjdlNDFhP2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D64b7a0c4c142780001f7e415%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786598828&share_id=f07229335eb242d296c12e2b47be32d2] [天猫国际:https://e.tb.cn/h.8iSg1aJx0fuzOvQ?tk=R6i7TZH90EI]
+A: 净透温和洁面慕斯（云朵洁面）￥680/100ml：氨基酸温和清洁。关键成分：烟酰胺、泛醇、透明质酸钠、扁柏水、牡丹花水。全肤质适用。购买：[抖音:https://kf.nihplod.cn/l/jm-dy] [小红书:https://kf.nihplod.cn/l/jm-xhs] [天猫国际:https://kf.nihplod.cn/l/jm-tm]
 
 Q: NIHPLOD有哪些磨砂膏产品？
-A: 均衡磨砂膏（黑曜磨砂）￥780/50ml：温和去角质提亮。关键成分：核桃壳粉、壬二酸、生育酚(维E)、迷迭香叶油、艾草叶提取物、葡萄柚籽提取物。每周1-2次。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3577875397465002136&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/64b223ab03887b0001cd91e5?xsec_token=XB8XdORJQf7l6M-F1je7CuYegYSXX97EnRpVaJr6O_rb0=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F64b223ab03887b0001cd91e5%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjRiMjIzYWIwMzg4N2IwMDAxY2Q5MWU1P2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D64b223ab03887b0001cd91e4%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599062&share_id=92c7fdd778a1468a905114de6f31c538] [天猫国际:https://e.tb.cn/h.8hFMoUpayPP5MtF?tk=GhQkTZHozSB]
+A: 均衡磨砂膏（黑曜磨砂）￥780/50ml：温和去角质提亮。关键成分：核桃壳粉、壬二酸、生育酚(维E)、迷迭香叶油、艾草叶提取物、葡萄柚籽提取物。每周1-2次。购买：[抖音:https://kf.nihplod.cn/l/ms-dy] [小红书:https://kf.nihplod.cn/l/ms-xhs] [天猫国际:https://kf.nihplod.cn/l/ms-tm]
 
 Q: NIHPLOD有哪些精华露产品？
-A: 时光涅槃臻萃精华露（童颜精华露）￥4,500/30ml：多效抗初老，改善细纹/色素/松弛。关键成分：烟酰胺、羟丙基四氢吡喃三醇(玻色因)、双歧杆菌发酵溶胞物、棕榈酰三肽-5、寡肽-1、富勒烯、半乳糖酵母发酵滤液、银耳子实体提取物、东京樱花叶提取物、曲克芦丁、海藻糖、生育酚(维E)。全肤质适用。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3772867019523883266&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/6503fa3e2d78a00001cff62f?xsec_token=XBB_7fRCcAJvazMaaJ9me_1MHdmhjOi9FuiWlO0XU0Rx4=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F6503fa3e2d78a00001cff62f%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjUwM2ZhM2UyZDc4YTAwMDAxY2ZmNjJmP2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D6503fa3d2d78a00001cff62c%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599300&share_id=247a0331754e40d983b4f3b6c09a6a8a] [天猫国际:https://e.tb.cn/h.86EUFYg4VB6P9sa?tk=PbdXTZHrXKh]
+A: 时光涅槃臻萃精华露（童颜精华露）￥4,500/30ml：多效抗初老，改善细纹/色素/松弛。关键成分：烟酰胺、羟丙基四氢吡喃三醇(玻色因)、双歧杆菌发酵溶胞物、棕榈酰三肽-5、寡肽-1、富勒烯、半乳糖酵母发酵滤液、银耳子实体提取物、东京樱花叶提取物、曲克芦丁、海藻糖、生育酚(维E)。全肤质适用。购买：[抖音:https://kf.nihplod.cn/l/jh-dy] [小红书:https://kf.nihplod.cn/l/jh-xhs] [天猫国际:https://kf.nihplod.cn/l/jh-tm]
 
 Q: NIHPLOD有哪些面霜？
-A: 恒采修护面霜（白魔法）￥2,800/50ml：淡化细纹、修复屏障。关键成分：羟丙基四氢吡喃三醇(玻色因)、神经酰胺NP、透明质酸钠、牛油果树果脂、泛醇、燕麦仁油、油橄榄果油、红没药醇、艾叶提取物、植物甾醇类。全肤质适用。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3772865348597055865&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/6503f9e66b07180001092c06?xsec_token=XBjyVlzQDwulxteO3IUldQLAGwtvzGmiFoRb4cCLl2lps=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F6503f9e66b07180001092c06%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjUwM2Y5ZTY2YjA3MTgwMDAxMDkyYzA2P2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D6503f9e66b07180001092bff%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599405&share_id=5702b8ccc36e4c7fa744d001d375f97f] [天猫国际:https://e.tb.cn/h.86E63c4xE9IR1rw?tk=9ZuQTZHH4ki]
+A: 恒采修护面霜（白魔法）￥2,800/50ml：淡化细纹、修复屏障。关键成分：羟丙基四氢吡喃三醇(玻色因)、神经酰胺NP、透明质酸钠、牛油果树果脂、泛醇、燕麦仁油、油橄榄果油、红没药醇、艾叶提取物、植物甾醇类。全肤质适用。购买：[抖音:https://kf.nihplod.cn/l/bm-dy] [小红书:https://kf.nihplod.cn/l/bm-xhs] [天猫国际:https://kf.nihplod.cn/l/bm-tm]
 
 Q: NIHPLOD有哪些面膜产品？
-A: 致奢赋活莱塞尔面膜（守护面膜）￥1,350/30g×4：修护提亮维稳淡化细纹。关键成分：α-熊果苷、烟酰胺、泛醇、透明质酸钠、乙酰基六肽-8、甜菜碱、狭叶越桔(蓝莓)果提取物、马齿苋提取物、粉防己提取物、植物甾醇类、精氨酸。独立装开封即用。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3772867910654099588&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/6503fa1c1f8b9c00011fade4?xsec_token=XBYJ6fp9bQI9Cht9l6l4Y0OSptnrSJfLteeLkWQ5fFEms=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F6503fa1c1f8b9c00011fade4%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjUwM2ZhMWMxZjhiOWMwMDAxMWZhZGU0P2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D6503fa1c1f8b9c00011fadde%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599495&share_id=ec04dbc9e41840eca0c653eabb05a7a3] [天猫国际:https://e.tb.cn/h.8iSp4fQ7tzmeRfu?tk=xLcVTZHutaf]
+A: 致奢赋活莱塞尔面膜（守护面膜）￥1,350/30g×4：修护提亮维稳淡化细纹。关键成分：α-熊果苷、烟酰胺、泛醇、透明质酸钠、乙酰基六肽-8、甜菜碱、狭叶越桔(蓝莓)果提取物、马齿苋提取物、粉防己提取物、植物甾醇类、精氨酸。独立装开封即用。购买：[抖音:https://kf.nihplod.cn/l/mm-dy] [小红书:https://kf.nihplod.cn/l/mm-xhs] [天猫国际:https://kf.nihplod.cn/l/mm-tm]
 
 Q: NIHPLOD有哪些防晒产品？
-A: 轻透长护防晒霜（蛋定防晒）￥880/40ml：修护隔离紫外线、提亮肤色。关键成分：燕麦仁油、双歧杆菌发酵溶胞物、神经酰胺NP、生育酚(维E)、油橄榄果油、卵磷脂。全肤质适用。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3662122010567425066&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/660d0f7c632219000174144c?xsec_token=XBug2eylPLO7XSGVMqR4ysmGx0eSyjiFiUT3yXv1Wssds=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F660d0f7c632219000174144c%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjYwZDBmN2M2MzIyMTkwMDAxNzQxNDRjP2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D660d0f7c632219000174144b%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599783&share_id=194cf8978a6d4118abebf38ed30b2b0b] [天猫国际:https://e.tb.cn/h.8SBepUq2syMufdW?tk=xvS6TZHzRoU]
+A: 轻透长护防晒霜（蛋定防晒）￥880/40ml：修护隔离紫外线、提亮肤色。关键成分：燕麦仁油、双歧杆菌发酵溶胞物、神经酰胺NP、生育酚(维E)、油橄榄果油、卵磷脂。全肤质适用。购买：[抖音:https://kf.nihplod.cn/l/fs-dy] [小红书:https://kf.nihplod.cn/l/fs-xhs] [天猫国际:https://kf.nihplod.cn/l/fs-tm]
 
 Q: NIHPLOD有哪些身体乳产品？
-A: 新生焕活身体乳（聚宝瓶）￥1,000/250ml：保湿修护淡化细纹。关键成分：牛油果树果脂、烟酰胺、羟丙基四氢吡喃三醇(玻色因)、透明质酸钠、光甘草定、泛醇、尿囊素、琉璃苣籽油、摩洛哥坚果油、棕榈酰三肽-5、粉防己提取物、鬼针草提取物。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3824663914944266696&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/67dbcfbbffa7580001bb253b?xsec_token=XBx2HAnr1HA2ImsAKIZrG7ERZowbna1vVqlxPPWwSj81s=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F67dbcfbbffa7580001bb253b%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjdkYmNmYmJmZmE3NTgwMDAxYmIyNTNiP2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D67dbcfbbffa7580001bb253a%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786602625&share_id=49c20cc01a6943f791c468d5e8e1c77a] [天猫国际:https://e.tb.cn/h.8iSJUU8kEPUD9zw?tk=uDEzTZHwcDO]
+A: 新生焕活身体乳（聚宝瓶）￥1,000/250ml：保湿修护淡化细纹。关键成分：牛油果树果脂、烟酰胺、羟丙基四氢吡喃三醇(玻色因)、透明质酸钠、光甘草定、泛醇、尿囊素、琉璃苣籽油、摩洛哥坚果油、棕榈酰三肽-5、粉防己提取物、鬼针草提取物。购买：[抖音:https://kf.nihplod.cn/l/st-dy] [小红书:https://kf.nihplod.cn/l/st-xhs] [天猫国际:https://kf.nihplod.cn/l/st-tm]
 
 Q: NIHPLOD有哪些护手霜产品？
-A: 抚纹紧致护手霜（随身笔）￥480/25ml：淡化细纹保湿修护。关键成分：角鲨烷、羟丙基四氢吡喃三醇(玻色因)、依克多因、可溶性胶原、水解胶原、泛醇、霍霍巴酯类、海藻糖、纤细裸藻多糖、乳杆菌。购买：[抖音:https://haohuo.jinritemai.com/ecommerce/trade/detail/index.html?id=3719983368344043526&origin_type=604] [小红书:https://www.xiaohongshu.hk/goods-detail/672dcef110adb50001cb9f2c?xsec_token=XBuSciVbThraY_XRbyYZ8bejSMI1RAUoO2hlGvrbv2LPY=&xsec_source=app_share&instation_link=xhsdiscover%3A%2F%2Fgoods_detail%2F672dcef110adb50001cb9f2c%3Ftrade_ext%3DeyJjaGFubmVsSW5mbyI6eyJjaGFubmVsIjoic2hhcmVfb3V0c2lkZSIsImV4dHJhSW5mbyI6bnVsbH0sImRzVG9rZW5JbmZvIjpudWxsLCJzaGFyZUxpbmsiOiJodHRwczovL3d3dy54aWFvaG9uZ3NodS5oay9nb29kcy1kZXRhaWwvNjcyZGNlZjExMGFkYjUwMDAxY2I5ZjJjP2FwcHVpZD02MGI5ZGM0MTAwMDAwMDAwMDEwMWUwNDYiLCJzcHVJbmZvIjpudWxsLCJsaXZlSW5mbyI6bnVsbCwic2hvcEluZm8iOm51bGwsImdvb2RzTm90ZUluZm8iOm51bGwsImNoYXRJbmZvIjpudWxsLCJzZWFyY2hJbmZvIjpudWxsLCJwcmVmZXIiOm51bGx9%26rate_limit_meta%3DitemId%253D672dcef110adb50001cb9f2b%26source%3D%26back_chain_id%3Dgoods_detail_share%26rn%3Dtrue&xhsshare=CopyLink&appuid=60b9dc41000000000101e046&apptime=1786599880&share_id=2eafb60abd3b45a8b5e34f284e6f6f62] [天猫国际:https://e.tb.cn/h.8SB489RS4VR9TpQ?tk=g9ROTZta8f4]
+A: 抚纹紧致护手霜（随身笔）￥480/25ml：淡化细纹保湿修护。关键成分：角鲨烷、羟丙基四氢吡喃三醇(玻色因)、依克多因、可溶性胶原、水解胶原、泛醇、霍霍巴酯类、海藻糖、纤细裸藻多糖、乳杆菌。购买：[抖音:https://kf.nihplod.cn/l/hs-dy] [小红书:https://kf.nihplod.cn/l/hs-xhs] [天猫国际:https://kf.nihplod.cn/l/hs-tm]
 
 Q: NIHPLOD有哪些护理油？
 A: 臻萃呵护护理油（绿魔法）￥1,350/30ml：深层修护滋养紧致，可混合面霜或身体乳使用。关键成分：向日葵籽油、霍霍巴籽油、椰子油、月见草油、白池花籽油、檀香油、柠檬籽油、乳香油、杜松果油、姜根油、肉豆蔻籽油。该产品即将上市，上市后可到抖音、小红书、天猫国际等渠道购买。
 # --- 产品FAQ：云朵洁面 ---
-Q: 云朵洁面适合敏感肌肤吗？
+Q: 净透温和洁面慕斯（云朵洁面）适合敏感肌肤吗？
 A: 非常适合。核心清洁成分是温和的氨基酸表活（椰油酰甘氨酸钾）和两性表活（椰油酰胺丙基甜菜碱），不刺激皮肤。扁柏水和牡丹花水有舒缓肌肤作用。建议首次使用前做耳后测试。
 
 Q: 云朵洁面能卸防晒和淡妆吗？
@@ -240,7 +237,7 @@ A: 全肤质适用，尤其适合中性、干性、敏感性和混合性肌肤�
 Q: 云朵洁面什么味道？
 A: 清淡优雅的日本扁柏和牡丹花香氛，高级植物清香。
 # --- 产品FAQ：黑曜磨砂膏 ---
-Q: 黑曜磨砂膏适合敏感肌吗？会刺激皮肤吗？
+Q: 均衡磨砂膏（黑曜磨砂膏）适合敏感肌吗？会刺激皮肤吗？
 A: 核桃壳粉是微米级超细颗粒，搭配壬二酸和艾草提取物舒缓泛红，敏感肌每周1-2次完全OK。
 
 Q: 使用后需要再用洗面奶吗？
@@ -271,7 +268,7 @@ Q: 对鸡皮肤有帮助吗？
 A: 有辅助改善作用，乳酸+胡桃壳粉去除堆积角质，需坚持配合高强度保湿。
 
 # --- 产品FAQ：守护面膜 ---
-Q: 守护面膜和普通蚕丝膜布有什么区别？
+Q: 致奢赋活莱塞尔面膜（守护面膜）和普通蚕丝膜布有什么区别？
 A: 莱赛尔膜布取自天然植物纤维，比蚕丝膜布更柔软透气，能锁住自重20倍精华，30分钟不干不滴落，无污染可降解。
 
 Q: 守护面膜敏感肌能用吗？
@@ -295,7 +292,7 @@ A: 适合。不含厚重油脂，烟酰胺有助调节油脂舒缓炎症。严�
 Q: 早上敷还是晚上敷效果好？
 A: 晚上敷效果更佳，夜间是皮肤修护黄金时间。白天重要场合妆前可用但务必防晒。
 # --- 产品FAQ：童颜精华露 ---
-Q: 童颜精华露价格不低，值这个价吗？
+Q: 时光涅槃臻萃精华露（童颜精华露）价格不低，值这个价吗？
 A: 完全理解您对价格的考量。我们的定价逻辑是“精简有效”——一瓶30ml的童颜精华露集齐了玻色因+胜肽+富勒烯三重核心抗初老成分，相当于将精华、抗初老精华和抗氧化精华合而为一，省去了您叠加3-4瓶其他产品的成本与负担。如果您想先感受NIHPLOD的肤感和品质，我建议从白魔法面霜或云朵洁面开始入门，门槛更友好，也能直观体验到脂质体技术的修护力。
 
 Q: 童颜精华露能提拉紧致吗？
@@ -322,7 +319,7 @@ A: 富勒烯是顶级抗氧化成分，像海绵一样高效吸附自由基，�
 Q: 适合什么肤质和年龄？
 A: 适合有抗初老、提亮、维稳需求的多种肤质。25岁及以上感觉皮肤松弛暗沉的群体。
 # --- 产品FAQ：白魔法面霜 ---
-Q: 白魔法主要解决什么皮肤问题？
+Q: 恒采修护面霜（白魔法面霜）主要解决什么皮肤问题？
 A: 特殊美容护理后泛红、敏感肌屏障修复、淡化细纹。
 
 Q: 夏天用会不会闷痘？
@@ -346,7 +343,7 @@ A: 非常适合。神经酰胺、红没药醇和燕麦仁油快速舒缓干燥�
 Q: 可以用在脖子和眼周吗？
 A: 可以。成分温和质地丰润，用于颈部预防颈纹，轻点眼周可作为滋润眼霜。
 # --- 产品FAQ：蛋定防晒 ---
-Q: 蛋定防晒和其他大牌防晒比有什么优势？
+Q: 轻透长护防晒霜（蛋定防晒）和其他大牌防晒比有什么优势？
 A: 专业角度来说，市面上很多高倍防晒（如SPF50+）侧重高倍防晒伤防护，适合长时间户外暴晒场景。而我们的蛋定防晒（SPF30 PA+++） 更侧重大都市日常通勤的防护诉求，一边防御紫外线，一边修护紫外线已经造成的微小损伤。我们添加了二裂酵母发酵溶胞物和燕麦仁油，肤感更像轻润乳液，不易闷痘不易泛白，尤其适合办公室白领和敏感肌日常使用。如果您是需要长时间户外暴晒，建议选高倍防晒；如果主要是通勤和室内，蛋定防晒的养肤逻辑更适合您
 
 Q: 蛋定防晒防晒值是多少？
@@ -373,7 +370,7 @@ A: 含生育酚(VE)+双歧杆菌发酵物+燕麦仁油三重抗氧化体系，�
 Q: 会搓泥吗？
 A: 配方普遍不易搓泥。建议等前面护肤品充分吸收1-2分钟后再上防晒，顺着一个方向轻推。
 # --- 产品FAQ：聚宝瓶身体乳 ---
-Q: 聚宝瓶敏感肌能用吗？
+Q: 新生焕活身体乳（聚宝瓶）敏感肌能用吗？
 A: 遵循温和无刺激原则，已剔除酒精和矿物油。添加红没药醇与泛醇协同舒缓。建议首次手腕内侧测试。
 
 Q: 烟酰胺和玻色因有什么用？
@@ -394,7 +391,7 @@ A: 需要。身体肌肤同样会因胶原流失而松弛产生皱纹。玻色�
 Q: 香味怎么样？
 A: 淡雅高级的治愈系香型，不冲鼻不廉价，不会与香水冲突。
 # --- 产品FAQ：随身笔护手霜 ---
-Q: 随身笔能淡化手部皱纹吗？
+Q: 抚纹紧致护手霜（随身笔）能淡化手部皱纹吗？
 A: 水解胶原深入真皮层补充胶原蛋白，可溶性胶原形成保湿膜，长期使用帮助淡化手部皱纹。
 
 Q: 对倒刺有没有用？
@@ -412,7 +409,7 @@ A: 可以。烟酰胺有助提亮肤色，依克多因抗氧化促进细胞新�
 Q: 适合送给长辈吗？
 A: 适合。长辈手部更需要滋润修护与紧致，功效明确设计高雅。
 # --- 产品FAQ：绿魔法护理油 ---
-Q: 绿魔法护理油是精华还是油？
+Q: 臻萃呵护护理油（绿魔法）是精华还是油？
 A: 精华级别的护理油。以油养肤，质地如水般清爽，兼具精华的功效和油脂的滋养。
 
 Q: 油性肌肤能用吗？
