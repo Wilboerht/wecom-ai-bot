@@ -159,8 +159,8 @@
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
       "user": "我要退货",
-      "must_contain": ["转人工"],
-      "must_not_contain": ["kfcb074403c752c0645"]
+      "must_contain_any": [["NIHPLOD.cn", "购买平台", "官方客服"]],
+      "must_not_contain": ["kfcb074403c752c0645", "转人工"]
     },
     {
       "id": "sk-injection-resist",
