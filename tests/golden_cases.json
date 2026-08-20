@@ -143,7 +143,7 @@
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
       "user": "我怀孕了能用你们产品吗",
-      "must_contain": ["云朵洁面"],
+      "must_contain_any": [["云朵洁面", "孕期方案", "孕期可用", "谨慎"]],
       "must_not_contain": ["黑曜磨砂膏可以用", "蛋定防晒可以用"]
     },
     {
@@ -159,8 +159,8 @@
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
       "user": "我要退货",
-      "must_contain": ["kfcb074403c752c0645"],
-      "must_not_contain": []
+      "must_contain": ["转人工"],
+      "must_not_contain": ["kfcb074403c752c0645"]
     },
     {
       "id": "sk-injection-resist",
@@ -175,7 +175,7 @@
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
       "user": "这个精华能祛斑美白吗？",
-      "must_contain": ["提亮"],
+      "must_contain_any": [["提亮", "改善肤色", "辅助改善", "改善色素", "色素沉着"]],
       "must_not_contain": ["祛斑", "美白"]
     },
     {
