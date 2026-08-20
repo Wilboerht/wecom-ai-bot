@@ -26,13 +26,14 @@ class TestEnterSessionEvent:
         """用本地集合替代 Redis 去重，避免跨测试运行的残留键影响结果"""
         seen = set()
 
-        def fake_dup(msg_id, kfid):
+        def fake_claim(msg_id):
             if msg_id in seen:
-                return True
+                return False
             seen.add(msg_id)
-            return False
+            return True
 
-        monkeypatch.setattr("src.core.store.msgid_is_duplicate", fake_dup)
+        monkeypatch.setattr("src.core.store.msgid_claim", fake_claim)
+        monkeypatch.setattr("src.core.store.msgid_release", lambda msg_id: seen.discard(msg_id))
 
     def test_processed_once_due_to_msgid_dedup(self, monkeypatch):
         """sync_msg 每次从头拉取，同一 enter_session 事件只应处理一次"""

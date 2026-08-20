@@ -4,12 +4,16 @@ After=network.target
 
 [Service]
 Type=simple
-User=root
+User=www-data
+Group=www-data
 WorkingDirectory=/opt/wecom-ai-bot
-ExecStart=/usr/bin/python3 -m uvicorn src.main:app --host 127.0.0.1 --port 8080
+ExecStart=/opt/wecom-ai-bot/venv/bin/uvicorn src.main:app --host 127.0.0.1 --port 8080
 Restart=always
 RestartSec=5
 EnvironmentFile=/opt/wecom-ai-bot/.env
+NoNewPrivileges=yes
+ProtectSystem=full
+LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target

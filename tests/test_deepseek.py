@@ -6,16 +6,14 @@ from unittest.mock import MagicMock, patch
 
 class TestDeepSeekChat:
     def test_chat_success(self):
-        with patch("src.ai.deepseek.Client") as mock_client:
+        with patch("src.ai.deepseek._get_client") as mock_get_client:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
             mock_resp.json.return_value = {
                 "choices": [{"message": {"content": "你好！有什么可以帮你的？"}}]
             }
             mock_resp.raise_for_status.return_value = None
-            mock_client.return_value.__enter__.return_value.post.return_value = (
-                mock_resp
-            )
+            mock_get_client.return_value.post.return_value = mock_resp
 
             from src.ai.deepseek import chat
 
@@ -30,37 +28,67 @@ class TestDeepSeekChat:
         from httpx import HTTPStatusError, Response
         from src.ai.deepseek import chat, AIServiceError
 
-        with patch("src.ai.deepseek.Client") as mock_client:
+        with patch("src.ai.deepseek._get_client") as mock_get_client:
             mock_resp = Response(status_code=401)
             error = HTTPStatusError("Unauthorized", request=None, response=mock_resp)  # type: ignore[arg-type]
-            mock_client.return_value.__enter__.return_value.post.side_effect = error
+            mock_get_client.return_value.post.side_effect = error
 
             with pytest.raises(AIServiceError):
                 chat([{"role": "user", "content": "test"}])
+            # 4xx（非 429）不重试
+            assert mock_get_client.return_value.post.call_count == 1
 
     def test_chat_http_429(self):
         from httpx import HTTPStatusError, Response
         from src.ai.deepseek import chat, AIServiceError
 
-        with patch("src.ai.deepseek.Client") as mock_client:
+        with patch("src.ai.deepseek._get_client") as mock_get_client, \
+                patch("src.ai.deepseek.time.sleep"):
             mock_resp = Response(status_code=429)
             error = HTTPStatusError("Rate limited", request=None, response=mock_resp)  # type: ignore[arg-type]
-            mock_client.return_value.__enter__.return_value.post.side_effect = error
+            mock_get_client.return_value.post.side_effect = error
 
             with pytest.raises(AIServiceError):
                 chat([{"role": "user", "content": "test"}])
+            # 429 重试 2 次后耗尽：共 3 次调用
+            assert mock_get_client.return_value.post.call_count == 3
 
     def test_chat_timeout(self):
         from httpx import TimeoutException
         from src.ai.deepseek import chat, AIServiceError
 
-        with patch("src.ai.deepseek.Client") as mock_client:
-            mock_client.return_value.__enter__.return_value.post.side_effect = (
+        with patch("src.ai.deepseek._get_client") as mock_get_client, \
+                patch("src.ai.deepseek.time.sleep"):
+            mock_get_client.return_value.post.side_effect = (
                 TimeoutException("timeout")
             )
 
             with pytest.raises(AIServiceError):
                 chat([{"role": "user", "content": "test"}])
+            # 超时重试 2 次后耗尽：共 3 次调用
+            assert mock_get_client.return_value.post.call_count == 3
+
+    def test_chat_429_retry_then_success(self):
+        """429 重试后成功：第一次 429，第二次返回正常内容"""
+        from httpx import HTTPStatusError, Response
+        from src.ai.deepseek import chat
+
+        with patch("src.ai.deepseek._get_client") as mock_get_client, \
+                patch("src.ai.deepseek.time.sleep"):
+            err_resp = Response(status_code=429)
+            error = HTTPStatusError("Rate limited", request=None, response=err_resp)  # type: ignore[arg-type]
+            ok_resp = MagicMock()
+            ok_resp.status_code = 200
+            ok_resp.json.return_value = {
+                "choices": [{"message": {"content": "重试后的回复"}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5},
+            }
+            ok_resp.raise_for_status.return_value = None
+            mock_get_client.return_value.post.side_effect = [error, ok_resp]
+
+            reply = chat([{"role": "user", "content": "test"}])
+            assert reply == "重试后的回复"
+            assert mock_get_client.return_value.post.call_count == 2
 
 
 class TestSessionManager:

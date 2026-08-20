@@ -18,8 +18,14 @@ echo "=== 创建日志目录 ==="
 mkdir -p $APP_DIR/logs
 deactivate
 
+echo "=== 安装 PM2 ==="
+if ! command -v pm2 >/dev/null 2>&1; then
+    npm i -g pm2
+fi
+
 echo "=== PM2 启动 ==="
 pm2 start $APP_DIR/deploy/ecosystem.config.js
+pm2 startup systemd
 pm2 save
 
 echo "=== 验证 ==="

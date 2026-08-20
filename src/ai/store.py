@@ -2,6 +2,7 @@
 Redis 持久化存储 — 会话、去重、限流、转接状态
 
 若未配置 REDIS_URL，自动回退到内存模式（兼容单机部署）。
+Redis 运行期故障时自动降级内存模式，并每 60 秒尝试重连恢复。
 """
 import json
 import logging
@@ -11,13 +12,40 @@ from ..config import config
 logger = logging.getLogger(__name__)
 
 _redis = None
+_redis_retry_at = 0.0  # Redis 故障后下次尝试重连的时间戳
+REDIS_RETRY_INTERVAL = 60  # 故障后每 60 秒尝试重连一次
+
+
+def _sanitize_redis_url(url: str) -> str:
+    """连接串脱敏：只保留 host:port/db，去掉 userinfo，避免密码进日志"""
+    try:
+        from urllib.parse import urlsplit
+        parts = urlsplit(url)
+        host = parts.hostname or "unknown"
+        port = f":{parts.port}" if parts.port else ""
+        return f"{host}{port}{parts.path}"
+    except Exception:
+        return "<redacted>"
+
+
+def _redis_down(e: Exception) -> None:
+    """Redis 运行期故障：记 error 并降级内存模式，60 秒后自动重试"""
+    global _redis, _redis_retry_at
+    logger.error("Redis 操作失败，降级到内存模式: %s", e)
+    _redis = False
+    _redis_retry_at = time.time() + REDIS_RETRY_INTERVAL
 
 
 def _get_redis():
-    """获取 Redis 连接（懒加载 + 连接池）"""
-    global _redis
-    if _redis is not None:
+    """获取 Redis 连接（懒加载 + 连接池）；故障降级内存模式并定时重连"""
+    global _redis, _redis_retry_at
+    if _redis:
         return _redis
+    if _redis is False:
+        # 故障冷却期：每 60 秒尝试一次重连，恢复后自动切回 Redis
+        if time.time() < _redis_retry_at:
+            return None
+        _redis = None
 
     url = getattr(config, "REDIS_URL", "") or ""
     if not url:
@@ -25,13 +53,15 @@ def _get_redis():
 
     try:
         import redis
-        _redis = redis.Redis.from_url(url, socket_connect_timeout=3, socket_timeout=3, decode_responses=True)
-        _redis.ping()
-        logger.info("Redis 连接成功: %s", url)
+        client = redis.Redis.from_url(url, socket_connect_timeout=3, socket_timeout=3, decode_responses=True)
+        client.ping()
+        _redis = client
+        logger.info("Redis 连接成功: %s", _sanitize_redis_url(url))
         return _redis
     except Exception as e:
         logger.warning("Redis 连接失败，使用内存模式: %s", e)
         _redis = False
+        _redis_retry_at = time.time() + REDIS_RETRY_INTERVAL
         return None
 
 
@@ -46,10 +76,11 @@ def session_get(user_id: str) -> list[dict]:
     """获取会话历史"""
     r = _get_redis()
     if r:
-        data = r.get(f"{SESSION_PREFIX}{user_id}")
-        if data:
-            return json.loads(data)
-        return []
+        try:
+            items = r.lrange(f"{SESSION_PREFIX}{user_id}", 0, -1)
+            return [json.loads(item) for item in items]
+        except Exception as e:
+            _redis_down(e)
 
     # 内存模式
     _cleanup_sessions()
@@ -65,15 +96,16 @@ def session_add(user_id: str, role: str, content: str, max_msgs: int = 20) -> No
     r = _get_redis()
     if r:
         key = f"{SESSION_PREFIX}{user_id}"
-        data = r.get(key)
-        msgs = json.loads(data) if data else []
-        msgs.append({"role": role, "content": content})
-        if len(msgs) > max_msgs:
-            msgs = msgs[-max_msgs:]
-        r.set(key, json.dumps(msgs, ensure_ascii=False), ex=config.SESSION_TTL)
-        return
+        try:
+            # LIST 原子追加：RPUSH + LTRIM 保留最近 max_msgs 条 + 刷新过期时间
+            r.rpush(key, json.dumps({"role": role, "content": content}, ensure_ascii=False))
+            r.ltrim(key, -max_msgs, -1)
+            r.expire(key, config.SESSION_TTL)
+            return
+        except Exception as e:
+            _redis_down(e)
 
-    # 内存模式
+    # 内存模式（单进程 GIL 下 list.append 原子，够用）
     if user_id not in _inmem_sessions:
         _inmem_sessions[user_id] = []
     _inmem_sessions[user_id].append({"role": role, "content": content})
@@ -91,27 +123,54 @@ def _cleanup_sessions():
             _inmem_session_ttl.pop(uid, None)
 
 
-# ---- 消息去重 ----
-_inmem_msgids: set = set()
-MSGID_PREFIX = "msgids:"
+# ---- 消息去重（原子 claim/release 语义） ----
+_inmem_msgids: dict[str, float] = {}  # msgid -> 过期时间戳
+MSGID_PREFIX = "kf:msgid:"
+MSGID_TTL = 1800  # 30分钟
+
+
+def msgid_claim(msgid: str) -> bool:
+    """原子认领消息：True=首次认领（可处理），False=重复（应跳过）。
+    处理失败时应调用 msgid_release 回滚，允许企业微信重推后再次处理。"""
+    r = _get_redis()
+    if r:
+        try:
+            return bool(r.set(f"{MSGID_PREFIX}{msgid}", 1, nx=True, ex=MSGID_TTL))
+        except Exception as e:
+            _redis_down(e)
+
+    # 内存模式：dict 存过期时间，惰性清理
+    _cleanup_msgids()
+    if msgid in _inmem_msgids:
+        return False
+    _inmem_msgids[msgid] = time.time() + MSGID_TTL
+    return True
+
+
+def msgid_release(msgid: str) -> None:
+    """回滚 msgid_claim（处理失败时调用，允许重试）"""
+    r = _get_redis()
+    if r:
+        try:
+            r.delete(f"{MSGID_PREFIX}{msgid}")
+            return
+        except Exception as e:
+            _redis_down(e)
+    _inmem_msgids.pop(msgid, None)
+
+
+def _cleanup_msgids():
+    """惰性清理过期的内存 msgid"""
+    now = time.time()
+    for mid in list(_inmem_msgids.keys()):
+        if _inmem_msgids[mid] <= now:
+            _inmem_msgids.pop(mid, None)
 
 
 def msgid_is_duplicate(msg_id: str, open_kfid: str) -> bool:
-    """检查消息是否已处理，未处理则标记"""
-    r = _get_redis()
-    if r:
-        key = f"{MSGID_PREFIX}{open_kfid}"
-        added = r.sadd(key, msg_id)
-        r.expire(key, 1800)  # 30分钟
-        return added == 0
-
-    # 内存模式
-    if msg_id in _inmem_msgids:
-        return True
-    _inmem_msgids.add(msg_id)
-    if len(_inmem_msgids) > 500:
-        _inmem_msgids = set(sorted(_inmem_msgids)[-200:])
-    return False
+    """[兼容旧接口] 检查消息是否已处理，未处理则标记。
+    新代码应使用 msgid_claim/msgid_release（处理失败可回滚）。"""
+    return not msgid_claim(msg_id)
 
 
 # ---- 速率限制 ----
@@ -127,15 +186,18 @@ def ratelimit_check(user_id: str, send_time: int = 0, max_per_window: int = 30, 
 
     r = _get_redis()
     if r:
-        key = f"{RATELIMIT_PREFIX}{user_id}"
-        cutoff = now - window_secs
-        r.zremrangebyscore(key, "-inf", cutoff)
-        count = r.zcard(key)
-        if count >= max_per_window:
-            return True
-        r.zadd(key, {str(send_time or now): send_time or now})
-        r.expire(key, window_secs * 2)
-        return False
+        try:
+            key = f"{RATELIMIT_PREFIX}{user_id}"
+            cutoff = now - window_secs
+            r.zremrangebyscore(key, "-inf", cutoff)
+            count = r.zcard(key)
+            if count >= max_per_window:
+                return True
+            r.zadd(key, {str(send_time or now): send_time or now})
+            r.expire(key, window_secs * 2)
+            return False
+        except Exception as e:
+            _redis_down(e)
 
     # 内存模式
     timestamps = _inmem_ratelimit.get(user_id, [])
@@ -157,10 +219,13 @@ def transfer_next_index(open_kfid: str, total: int) -> int:
         return 0
     r = _get_redis()
     if r:
-        idx = r.incr(f"{_RR_PREFIX}{open_kfid}") % total
-        if idx < 0:
-            idx = 0
-        return idx
+        try:
+            idx = r.incr(f"{_RR_PREFIX}{open_kfid}") % total
+            if idx < 0:
+                idx = 0
+            return idx
+        except Exception as e:
+            _redis_down(e)
     # 内存回退：简单轮转
     import random
     return random.randrange(total)
@@ -184,15 +249,18 @@ def transfer_pick_agent(open_kfid: str, candidates: list, preferred: str = "") -
     # 均衡：选当前接待量最少的
     r = _get_redis()
     if r:
-        best = candidates[0]
-        best_load = _get_agent_load(r, open_kfid, best)
-        for agent in candidates[1:]:
-            load = _get_agent_load(r, open_kfid, agent)
-            if load < best_load:
-                best_load = load
-                best = agent
-        r.incr(f"{_LOAD_PREFIX}{open_kfid}:{best}")
-        return best
+        try:
+            best = candidates[0]
+            best_load = _get_agent_load(r, open_kfid, best)
+            for agent in candidates[1:]:
+                load = _get_agent_load(r, open_kfid, agent)
+                if load < best_load:
+                    best_load = load
+                    best = agent
+            r.incr(f"{_LOAD_PREFIX}{open_kfid}:{best}")
+            return best
+        except Exception as e:
+            _redis_down(e)
 
     # 内存回退：简单轮转
     idx = transfer_next_index(open_kfid, len(candidates))
@@ -211,7 +279,10 @@ def transfer_complete(open_kfid: str, agent: str) -> None:
     """接待完成，减少该接待人员的负载计数"""
     r = _get_redis()
     if r:
-        r.decr(f"{_LOAD_PREFIX}{open_kfid}:{agent}")
+        try:
+            r.decr(f"{_LOAD_PREFIX}{open_kfid}:{agent}")
+        except Exception as e:
+            _redis_down(e)
 
 
 # ---- 用户→接待人绑定（优先上次服务过的同事） ----
@@ -222,7 +293,10 @@ def get_last_agent(external_userid: str) -> str:
     """获取用户上次转接的接待人员"""
     r = _get_redis()
     if r:
-        return r.get(f"{_AGENT_PREFIX}{external_userid}") or ""
+        try:
+            return r.get(f"{_AGENT_PREFIX}{external_userid}") or ""
+        except Exception as e:
+            _redis_down(e)
     return ""
 
 
@@ -230,7 +304,10 @@ def set_last_agent(external_userid: str, service_userid: str) -> None:
     """记录用户转接到的接待人员"""
     r = _get_redis()
     if r:
-        r.set(f"{_AGENT_PREFIX}{external_userid}", service_userid, ex=86400 * 30)
+        try:
+            r.set(f"{_AGENT_PREFIX}{external_userid}", service_userid, ex=86400 * 30)
+        except Exception as e:
+            _redis_down(e)
     # 内存模式不记录（冷启动丢失可接受）
 
 
@@ -252,8 +329,11 @@ def profile_get(open_kfid: str, external_userid: str) -> dict:
     """获取用户护肤档案"""
     r = _get_redis()
     if r:
-        data = r.get(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}")
-        return json.loads(data) if data else {}
+        try:
+            data = r.get(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}")
+            return json.loads(data) if data else {}
+        except Exception as e:
+            _redis_down(e)
     _warn_profile_no_redis()
     return {}
 
@@ -262,10 +342,13 @@ def profile_update(open_kfid: str, external_userid: str, fields: dict) -> None:
     """更新用户护肤档案，合并新字段"""
     r = _get_redis()
     if r:
-        current = profile_get(open_kfid, external_userid)
-        current.update(fields)
-        r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
-        return
+        try:
+            current = profile_get(open_kfid, external_userid)
+            current.update(fields)
+            r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
+            return
+        except Exception as e:
+            _redis_down(e)
     _warn_profile_no_redis()
     logger.warning("档案写入被丢弃: user=%s fields=%s", external_userid, list(fields))
 
@@ -276,44 +359,64 @@ def profile_delete_keys(open_kfid: str, external_userid: str, keys: list) -> Non
         return
     r = _get_redis()
     if r:
-        current = profile_get(open_kfid, external_userid)
-        if not current:
-            return
-        changed = False
-        for k in keys:
-            if k in current:
-                current.pop(k)
-                changed = True
-        if changed:
-            r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
+        try:
+            current = profile_get(open_kfid, external_userid)
+            if not current:
+                return
+            changed = False
+            for k in keys:
+                if k in current:
+                    current.pop(k)
+                    changed = True
+            if changed:
+                r.set(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", json.dumps(current, ensure_ascii=False), ex=86400 * 90)
+        except Exception as e:
+            _redis_down(e)
 
 
 # ---- 通用键值存储（短流程状态机） ----
-_inmem_kv: dict[str, str] = {}
+_inmem_kv: dict[str, tuple[str, float]] = {}  # key -> (value, 过期时间戳)
 
 
 def kv_set(key: str, value: str, ttl: int = 600) -> None:
-    """写入键值，带过期时间（秒）"""
+    """写入键值，带过期时间（秒）。内存模式同样生效 TTL（惰性过期）"""
     r = _get_redis()
     if r:
-        r.set(key, value, ex=ttl)
-        return
-    _inmem_kv[key] = value
+        try:
+            r.set(key, value, ex=ttl)
+            return
+        except Exception as e:
+            _redis_down(e)
+    _inmem_kv[key] = (value, time.time() + ttl)
 
 
 def kv_get(key: str) -> str:
-    """读取键值，不存在返回空串"""
+    """读取键值，不存在或已过期返回空串"""
     r = _get_redis()
     if r:
-        return r.get(key) or ""
-    return _inmem_kv.get(key, "")
+        try:
+            return r.get(key) or ""
+        except Exception as e:
+            _redis_down(e)
+    item = _inmem_kv.get(key)
+    if not item:
+        return ""
+    value, expire_at = item
+    if expire_at <= time.time():
+        _inmem_kv.pop(key, None)
+        return ""
+    return value
 
 
 def kv_delete(key: str) -> None:
     """删除键"""
     r = _get_redis()
     if r:
-        r.delete(key)
+        try:
+            r.delete(key)
+            return
+        except Exception as e:
+            _redis_down(e)
     _inmem_kv.pop(key, None)
 
 
@@ -325,7 +428,10 @@ def privacy_notice_accepted(open_kfid: str, external_userid: str) -> bool:
     """检查用户是否已确认隐私声明"""
     r = _get_redis()
     if r:
-        return r.get(f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}") == "1"
+        try:
+            return r.get(f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}") == "1"
+        except Exception as e:
+            _redis_down(e)
     return False
 
 
@@ -333,4 +439,7 @@ def privacy_notice_accept(open_kfid: str, external_userid: str) -> None:
     """记录用户已确认隐私声明"""
     r = _get_redis()
     if r:
-        r.set(f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}", "1", ex=86400 * 365)
+        try:
+            r.set(f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}", "1", ex=86400 * 365)
+        except Exception as e:
+            _redis_down(e)

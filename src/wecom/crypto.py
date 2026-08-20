@@ -11,11 +11,15 @@ https://developer.work.weixin.qq.com/document/path/90968
 
 import base64
 import hashlib
+import hmac
+import logging
 import random
 import string
 import struct
 import time
 from Crypto.Cipher import AES
+
+logger = logging.getLogger(__name__)
 
 
 def pkcs7_pad(data: bytes, block_size: int = 32) -> bytes:
@@ -94,10 +98,9 @@ class WXBizMsgCrypt:
             DecryptError: 解密失败
         """
         computed = self._compute_signature(timestamp, nonce, echostr)
-        if computed != msg_signature:
-            raise SignatureError(
-                f"签名验证失败: computed={computed}, expected={msg_signature}"
-            )
+        if not hmac.compare_digest(computed, msg_signature):
+            logger.warning("签名验证失败: timestamp=%s nonce=%s", timestamp, nonce)
+            raise SignatureError("签名验证失败")
 
         try:
             encrypted = base64.b64decode(echostr)
@@ -108,10 +111,13 @@ class WXBizMsgCrypt:
         except Exception as e:
             raise DecryptError(f"解密失败: {e}") from e
 
-        content = decrypted[16:]
-        msg_len = struct.unpack("!I", content[:4])[0]
-        msg = content[4 : 4 + msg_len]
-        corp_id = content[4 + msg_len :].decode("utf-8")
+        try:
+            content = decrypted[16:]
+            msg_len = struct.unpack("!I", content[:4])[0]
+            msg = content[4 : 4 + msg_len]
+            corp_id = content[4 + msg_len :].decode("utf-8")
+        except (struct.error, UnicodeDecodeError) as e:
+            raise DecryptError(f"解密内容解析失败: {e}") from e
 
         if corp_id != self.corp_id:
             raise DecryptError(f"CorpID 不匹配: {corp_id} != {self.corp_id}")
@@ -136,10 +142,9 @@ class WXBizMsgCrypt:
             DecryptError: 解密失败或 CorpID 不匹配
         """
         computed = self._compute_signature(timestamp, nonce, encrypt)
-        if computed != msg_signature:
-            raise SignatureError(
-                f"签名验证失败: computed={computed}, expected={msg_signature}"
-            )
+        if not hmac.compare_digest(computed, msg_signature):
+            logger.warning("签名验证失败: timestamp=%s nonce=%s", timestamp, nonce)
+            raise SignatureError("签名验证失败")
 
         try:
             encrypted = base64.b64decode(encrypt)
@@ -150,10 +155,13 @@ class WXBizMsgCrypt:
         except Exception as e:
             raise DecryptError(f"解密失败: {e}") from e
 
-        content = decrypted[16:]
-        msg_len = struct.unpack("!I", content[:4])[0]
-        msg = content[4 : 4 + msg_len].decode("utf-8")
-        corp_id = content[4 + msg_len :].decode("utf-8")
+        try:
+            content = decrypted[16:]
+            msg_len = struct.unpack("!I", content[:4])[0]
+            msg = content[4 : 4 + msg_len].decode("utf-8")
+            corp_id = content[4 + msg_len :].decode("utf-8")
+        except (struct.error, UnicodeDecodeError) as e:
+            raise DecryptError(f"解密内容解析失败: {e}") from e
 
         if corp_id != self.corp_id:
             raise DecryptError(

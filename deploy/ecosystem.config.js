@@ -17,6 +17,7 @@ module.exports = {
         max_memory_restart: '512M',
         kill_timeout: 5000,
         listen_timeout: 10000,
-        env_file: './.env',
+        // 环境变量由应用内 python-dotenv 从 ./.env 加载 (PM2 不支持 env_file 键, 勿加)
+        // 日志轮转: 使用 pm2-logrotate (pm2 install pm2-logrotate)
     }]
 };

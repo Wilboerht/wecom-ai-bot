@@ -6,12 +6,14 @@ NIHPLOD 旎柏 AI 智能客服 — FastAPI 服务入口
 import hmac
 import logging
 import re
+import threading
 import time
 import traceback
 from urllib.parse import quote
 
 from fastapi import FastAPI, Header, Request, Query, BackgroundTasks
 from fastapi.responses import JSONResponse, PlainTextResponse, Response, RedirectResponse
+from starlette.concurrency import run_in_threadpool
 from .config import config
 from .wecom.crypto import WXBizMsgCrypt
 from .core import handle_callback, process_kf_messages
@@ -68,25 +70,29 @@ async def health():
 # ---- 客服链接生成（供 advisor 子站服务端代理调用） ----
 # 官方要求：scene_param 必须拼接在「获取客服账号链接」接口返回的 url 之后，
 # 返回的链接不允许修改或复制参数到其他链接使用。
-_kf_link_cache: dict[str, str] = {}
-_kf_link_cache_time: dict[str, float] = {}
+# key 含 scene：scene 变化不能返回旧链接；加锁防并发首次请求重复调 add_contact_way
+_kf_link_cache: dict[tuple[str, str], str] = {}
+_kf_link_cache_time: dict[tuple[str, str], float] = {}
+_kf_link_lock = threading.Lock()
 _KF_LINK_TTL = 12 * 3600
 
 
 def _get_advisor_link(open_kfid: str, scene: str) -> str:
+    key = (open_kfid, scene)
     now = time.time()
-    cached = _kf_link_cache.get(open_kfid)
-    if cached and now - _kf_link_cache_time.get(open_kfid, 0) < _KF_LINK_TTL:
-        return cached
+    with _kf_link_lock:
+        cached = _kf_link_cache.get(key)
+        if cached and now - _kf_link_cache_time.get(key, 0) < _KF_LINK_TTL:
+            return cached
 
-    from .wecom.wxkf import get_account_link
+        from .wecom.wxkf import get_account_link
 
-    url = get_account_link(config.WECOM_CORP_ID, config.WECOM_SECRET, open_kfid, scene)
-    if not url:
-        raise RuntimeError("get_account_link 返回空链接")
-    _kf_link_cache[open_kfid] = url
-    _kf_link_cache_time[open_kfid] = now
-    return url
+        url = get_account_link(config.WECOM_CORP_ID, config.WECOM_SECRET, open_kfid, scene)
+        if not url:
+            raise RuntimeError("get_account_link 返回空链接")
+        _kf_link_cache[key] = url
+        _kf_link_cache_time[key] = now
+        return url
 
 
 @app.get("/api/kf-link")
@@ -160,7 +166,8 @@ async def handle_wx_callback_route(request: Request, background_tasks: Backgroun
         return Response(content="", status_code=200)
     body = await request.body()
     query = dict(request.query_params)
-    return _route(body.decode("utf-8"), query, crypto_wx, background_tasks)
+    # 普通消息被动回复会同步调 AI（最长 28s+重试），移入线程池避免卡死事件循环
+    return await run_in_threadpool(_route, body.decode("utf-8"), query, crypto_wx, background_tasks)
 
 
 def _route(body: str, query: dict, crypto: WXBizMsgCrypt, bg: BackgroundTasks) -> Response:

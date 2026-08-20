@@ -8,6 +8,7 @@
 """
 import logging
 import re
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -35,22 +36,47 @@ REPORT_MANAGED_KEYS = [
 ]
 
 
+_no_api_key_warned = False
+
+
+def _mask_session(session_id: str) -> str:
+    """sessionId 是拉取报告的凭证，日志只打前 8 位"""
+    return session_id[:8] + "..."
+
+
 def _fetch_report(session_id: str) -> dict | None:
-    """调 skin-advisor 内部接口拉取报告摘要，失败返回 None"""
+    """调 skin-advisor 内部接口拉取报告摘要，失败返回 None。
+    超时/网络异常/5xx 重试 1 次（退避 1s），404 等客户端错误不重试。"""
+    global _no_api_key_warned
     if not config.INTERNAL_API_KEY or not config.ADVISOR_REPORT_API_URL:
+        if not _no_api_key_warned:
+            _no_api_key_warned = True
+            logger.warning("INTERNAL_API_KEY/ADVISOR_REPORT_API_URL 未配置，测肤报告拉取已停用")
         return None
-    try:
-        resp = httpx.get(
-            config.ADVISOR_REPORT_API_URL,
-            params={"sessionId": session_id},
-            headers={"x-internal-key": config.INTERNAL_API_KEY},
-            timeout=_TIMEOUT,
-        )
-    except Exception as e:
-        logger.warning("report-summary 请求失败: %s", e)
-        return None
-    if resp.status_code != 200:
-        logger.warning("report-summary 返回 %s: user session=%s", resp.status_code, session_id)
+    resp = None
+    for attempt in range(2):
+        try:
+            resp = httpx.get(
+                config.ADVISOR_REPORT_API_URL,
+                params={"sessionId": session_id},
+                headers={"x-internal-key": config.INTERNAL_API_KEY},
+                timeout=_TIMEOUT,
+            )
+        except Exception as e:
+            if attempt == 0:
+                logger.warning("report-summary 请求失败，1s 后重试: %s", e)
+                time.sleep(1)
+                continue
+            logger.warning("report-summary 请求失败: %s", e)
+            return None
+        if resp.status_code == 200:
+            break
+        # 5xx 重试一次；4xx（如 404 报告不存在）不重试
+        if resp.status_code >= 500 and attempt == 0:
+            logger.warning("report-summary 返回 %s，1s 后重试", resp.status_code)
+            time.sleep(1)
+            continue
+        logger.warning("report-summary 返回 %s: user session=%s", resp.status_code, _mask_session(session_id))
         return None
     try:
         data = resp.json()
@@ -248,7 +274,7 @@ def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> N
     # 新报告缺失的字段（过敏史/重点问题等）不应残留
     store.profile_delete_keys(open_kfid, external_userid, REPORT_MANAGED_KEYS)
     store.profile_update(open_kfid, external_userid, fields)
-    logger.info("Report profile saved: user=%s session=%s fields=%s", external_userid, scene_param, list(fields))
+    logger.info("Report profile saved: user=%s session=%s fields=%s", external_userid, _mask_session(scene_param), list(fields))
 
     # 欢迎语：优先用 welcome_code（微信事件响应消息，仅 48h 内未收过欢迎语且
     # 用户未发过消息时才下发）。无 welcome_code 时退化为普通 send_msg 补发——
@@ -283,6 +309,6 @@ def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> N
                     content=build_welcome_text(report),
                 )
                 if ok:
-                    logger.info("Welcome fallback sent: user=%s session=%s", external_userid, scene_param)
+                    logger.info("Welcome fallback sent: user=%s session=%s", external_userid, _mask_session(scene_param))
             except Exception as e:
                 logger.warning("Welcome 补发失败: %s", e)
