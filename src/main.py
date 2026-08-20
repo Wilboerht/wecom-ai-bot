@@ -18,6 +18,7 @@ from .config import config
 from .wecom.crypto import WXBizMsgCrypt
 from .core import handle_callback, process_kf_messages
 from .links import load_links, get_target
+from .ai import store
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL.upper(), logging.INFO),
@@ -126,6 +127,60 @@ async def advisor_kf_link(
     sep = "&" if "?" in base_url else "?"
     url = f"{base_url}{sep}scene_param={quote(session_id, safe='')}"
     return {"url": url}
+
+
+# ---- PII 导出/删除（个人信息保护法 查阅权/删除权，仅供服务端间调用） ----
+# 与 /api/kf-link 相同的 x-internal-key 鉴权；出错返回真实状态码，不走全局 200 兜底
+_PII_ID_RE = re.compile(r"[0-9A-Za-z_\-]{1,128}")
+
+
+def _pii_check(open_kfid: str, external_userid: str, x_internal_key: str):
+    """PII 管理端点公共校验：鉴权 + 参数白名单。通过返回 None，否则返回错误响应"""
+    if not config.INTERNAL_API_KEY or not hmac.compare_digest(x_internal_key, config.INTERNAL_API_KEY):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    if not _PII_ID_RE.fullmatch(open_kfid) or not _PII_ID_RE.fullmatch(external_userid):
+        return JSONResponse({"error": "invalid open_kfid or external_userid"}, status_code=400)
+    return None
+
+
+@app.get("/api/pii/export")
+async def pii_export(
+    open_kfid: str = Query(...),
+    external_userid: str = Query(...),
+    x_internal_key: str = Header("", alias="x-internal-key"),
+):
+    """导出用户全部数据（查阅权）"""
+    err = _pii_check(open_kfid, external_userid, x_internal_key)
+    if err:
+        return err
+    try:
+        data = store.export_user_data(open_kfid, external_userid)
+    except Exception as e:
+        logger.error("PII 导出失败: open_kfid=%s err=%s", open_kfid, e)
+        return JSONResponse({"error": "export failed"}, status_code=500)
+    # 审计日志：只记标识与动作，不记数据内容；euid 只记前 8 位
+    logger.info("PII 导出: open_kfid=%s euid=%s***", open_kfid, external_userid[:8])
+    return data
+
+
+@app.post("/api/pii/delete")
+async def pii_delete(
+    open_kfid: str = Query(...),
+    external_userid: str = Query(...),
+    x_internal_key: str = Header("", alias="x-internal-key"),
+):
+    """删除用户全部数据（删除权，破坏性操作仅 POST，不用 GET）"""
+    err = _pii_check(open_kfid, external_userid, x_internal_key)
+    if err:
+        return err
+    try:
+        deleted = store.delete_user_data(open_kfid, external_userid)
+    except Exception as e:
+        logger.error("PII 删除失败: open_kfid=%s err=%s", open_kfid, e)
+        return JSONResponse({"error": "delete failed"}, status_code=500)
+    categories = [k.split(":")[0] for k in deleted]
+    logger.info("PII 删除: open_kfid=%s euid=%s*** 删除类别=%s", open_kfid, external_userid[:8], categories)
+    return {"deleted": deleted}
 
 
 @app.get("/callback")

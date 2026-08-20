@@ -443,3 +443,103 @@ def privacy_notice_accept(open_kfid: str, external_userid: str) -> None:
             r.set(f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}", "1", ex=86400 * 365)
         except Exception as e:
             _redis_down(e)
+
+
+# ---- PII 导出/删除（个人信息保护法 查阅权/删除权） ----
+# 按 (open_kfid, external_userid) 维度键控的用户数据 key：
+#   sess:{kfid}:{euid}                 会话历史 LIST（SESSION_TTL，默认 30 分钟）
+#   profile:{kfid}:{euid}              用户护肤档案 STRING（90 天，含过敏史/孕期等敏感字段）
+#   privacy:{kfid}:{euid}              隐私告知确认标记 STRING（365 天）
+#   orderflow:{kfid}:{euid}            订单查询流程状态 kv（600s）
+#   kf:transferred:{kfid}:{euid}       转人工跨批次标记 kv（300s）
+#   welcome-fallback:{kfid}:{euid}:*   欢迎语补发去重 kv（7 天，按报告 scene_param）
+#   agent:{euid}                       用户→上次接待人绑定 STRING（30 天，不带 kfid）
+#   rl:{euid}                          限流时间戳 ZSET（约 120s，不带 kfid）
+# 明确不覆盖：kf:msgid:{msgid} 去重键按消息而非按用户存储，无法按用户枚举，1800s 自然过期。
+
+_WELCOME_FALLBACK_PREFIX = "welcome-fallback:"
+
+
+def _user_kv_keys(open_kfid: str, external_userid: str) -> list[str]:
+    """该用户键控的 kv key 清单：固定两个 + welcome-fallback 前缀扫描"""
+    fixed = [
+        f"orderflow:{open_kfid}:{external_userid}",
+        f"kf:transferred:{open_kfid}:{external_userid}",
+    ]
+    pattern_prefix = f"{_WELCOME_FALLBACK_PREFIX}{open_kfid}:{external_userid}:"
+    r = _get_redis()
+    if r:
+        try:
+            return fixed + list(r.scan_iter(match=f"{pattern_prefix}*", count=100))
+        except Exception as e:
+            _redis_down(e)
+    return fixed + [k for k in _inmem_kv if k.startswith(pattern_prefix)]
+
+
+def _ratelimit_export(external_userid: str) -> list[float] | None:
+    """限流窗口内的时间戳列表（无数据返回 None）"""
+    r = _get_redis()
+    if r:
+        try:
+            items = r.zrange(f"{RATELIMIT_PREFIX}{external_userid}", 0, -1, withscores=True)
+            scores = [score for _, score in items]
+            return scores or None
+        except Exception as e:
+            _redis_down(e)
+    timestamps = _inmem_ratelimit.get(external_userid)
+    return list(timestamps) if timestamps else None
+
+
+def export_user_data(open_kfid: str, external_userid: str) -> dict:
+    """导出该用户的全部数据（PIPL 查阅权）。各部分无数据时为 null。
+    msgid 去重键按消息存储无法按用户枚举，不包含（1800s 自然过期）。"""
+    user_id = f"{open_kfid}:{external_userid}"
+    kv: dict[str, str] = {}
+    for key in _user_kv_keys(open_kfid, external_userid):
+        value = kv_get(key)
+        if value:
+            kv[key] = value
+    return {
+        "open_kfid": open_kfid,
+        "external_userid": external_userid,
+        "session": session_get(user_id) or None,
+        "profile": profile_get(open_kfid, external_userid) or None,
+        "privacy_notice_accepted": privacy_notice_accepted(open_kfid, external_userid),
+        "kv": kv or None,
+        "last_agent": get_last_agent(external_userid) or None,
+        "ratelimit": _ratelimit_export(external_userid),
+    }
+
+
+def delete_user_data(open_kfid: str, external_userid: str) -> list[str]:
+    """删除该用户的全部数据（PIPL 删除权），返回实际删除的 key 清单（类别即 key 前缀）。
+    msgid 去重键按消息存储无法按用户枚举，不删除（1800s 自然过期）。"""
+    user_id = f"{open_kfid}:{external_userid}"
+    keys = [
+        f"{SESSION_PREFIX}{user_id}",
+        f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}",
+        f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}",
+        f"{_AGENT_PREFIX}{external_userid}",
+        f"{RATELIMIT_PREFIX}{external_userid}",
+        *_user_kv_keys(open_kfid, external_userid),
+    ]
+    deleted: list[str] = []
+    r = _get_redis()
+    if r:
+        try:
+            for key in keys:
+                if r.delete(key):
+                    deleted.append(key)
+            return deleted
+        except Exception as e:
+            _redis_down(e)
+    # 内存模式：profile/privacy/agent 本就只落 Redis，只清内存侧数据
+    if _inmem_sessions.pop(user_id, None) is not None:
+        deleted.append(f"{SESSION_PREFIX}{user_id}")
+    _inmem_session_ttl.pop(user_id, None)
+    if _inmem_ratelimit.pop(external_userid, None) is not None:
+        deleted.append(f"{RATELIMIT_PREFIX}{external_userid}")
+    for key in keys:
+        if _inmem_kv.pop(key, None) is not None:
+            deleted.append(key)
+    return deleted

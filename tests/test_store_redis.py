@@ -101,3 +101,59 @@ class TestRedisDownFallback:
         monkeypatch.setattr(fake_redis, "get", boom)
         store.kv_set("kerr", "verr", ttl=60)  # 写入降级内存
         assert store.kv_get("kerr") == "verr"
+
+
+class TestPiiExportDeleteRedis:
+    """PII 导出/删除的 Redis 路径（含只落 Redis 的 profile/privacy/last_agent）"""
+
+    def test_export_full_structure(self, fake_redis):
+        uid = "kf1:eu1"
+        store.session_add(uid, "user", "hi")
+        store.profile_update("kf1", "eu1", {"过敏史": "花粉"})
+        store.privacy_notice_accept("kf1", "eu1")
+        store.set_last_agent("eu1", "agent01")
+        store.kv_set("orderflow:kf1:eu1", '{"step":"channel"}', 600)
+        store.kv_set("welcome-fallback:kf1:eu1:sc1", "1", 600)
+        store.ratelimit_check("eu1")
+
+        data = store.export_user_data("kf1", "eu1")
+        assert data["session"][0]["content"] == "hi"
+        assert data["profile"] == {"过敏史": "花粉"}
+        assert data["privacy_notice_accepted"] is True
+        assert data["last_agent"] == "agent01"
+        assert data["kv"]["orderflow:kf1:eu1"] == '{"step":"channel"}'
+        assert data["kv"]["welcome-fallback:kf1:eu1:sc1"] == "1"
+        assert "kf:transferred:kf1:eu1" not in data["kv"]  # 未写入的不出现
+        assert len(data["ratelimit"]) == 1
+
+    def test_delete_clears_all_keys(self, fake_redis):
+        uid = "kf1:eu2"
+        store.session_add(uid, "user", "hi")
+        store.profile_update("kf1", "eu2", {"肤质": "干性"})
+        store.privacy_notice_accept("kf1", "eu2")
+        store.set_last_agent("eu2", "agent01")
+        store.kv_set("orderflow:kf1:eu2", "{}", 600)
+        store.kv_set("kf:transferred:kf1:eu2", "1", 300)
+        store.kv_set("welcome-fallback:kf1:eu2:sc1", "1", 600)
+        store.ratelimit_check("eu2")
+
+        deleted = store.delete_user_data("kf1", "eu2")
+        assert set(deleted) == {
+            "sess:kf1:eu2", "profile:kf1:eu2", "privacy:kf1:eu2",
+            "agent:eu2", "rl:eu2",
+            "orderflow:kf1:eu2", "kf:transferred:kf1:eu2",
+            "welcome-fallback:kf1:eu2:sc1",
+        }
+        # 二次导出应为空
+        again = store.export_user_data("kf1", "eu2")
+        assert again["session"] is None
+        assert again["profile"] is None
+        assert again["privacy_notice_accepted"] is False
+        assert again["last_agent"] is None
+        assert again["kv"] is None
+        assert again["ratelimit"] is None
+
+    def test_delete_does_not_touch_other_users(self, fake_redis):
+        store.profile_update("kf1", "other", {"肤质": "油性"})
+        store.delete_user_data("kf1", "eu3")
+        assert store.profile_get("kf1", "other") == {"肤质": "油性"}
