@@ -1,8 +1,8 @@
-"""知识库加载 — mtime 热加载 / 空行终止续行 / system prompt 缓存联动"""
+"""知识库加载 — mtime 热加载 / 空行终止续行 / system prompt 缓存联动 / 常驻+按需分段"""
 
 import os
 
-from src.ai.knowledge import load_knowledge
+from src.ai.knowledge import load_knowledge, load_knowledge_parts
 from src.core import get_system_prompt
 
 
@@ -165,3 +165,66 @@ class TestSystemPromptCache:
             lambda kfid: {"system_prompt": "SP", "knowledge_file": str(fp)},
         )
         assert get_system_prompt("kf-test-stable") is get_system_prompt("kf-test-stable")
+
+
+_SECTIONED_KB = (
+    "品牌介绍行\n"
+    "\n"
+    "Q: 通用问题\n"
+    "A: 通用答案\n"
+    "\n"
+    "# --- 产品FAQ：云朵洁面 ---\n"
+    "Q: 云朵洁面含酒精吗\n"
+    "A: 不含\n"
+    "\n"
+    "# --- 产品FAQ：白魔法面霜 ---\n"
+    "Q: 白魔法油皮能用吗\n"
+    "A: 可以\n"
+)
+
+
+class TestLoadKnowledgeParts:
+    def test_splits_base_and_sections(self, tmp_path):
+        """常驻段不含产品FAQ条目；每个产品段独立成块"""
+        fp = tmp_path / "kbp1.txt"
+        _write(fp, _SECTIONED_KB)
+        base, sections = load_knowledge_parts(str(fp))
+
+        assert "品牌介绍行" in base and "通用答案" in base
+        assert "云朵洁面含酒精吗" not in base
+        assert set(sections) == {"云朵洁面", "白魔法面霜"}
+        assert "不含" in sections["云朵洁面"] and "【产品FAQ：云朵洁面】" in sections["云朵洁面"]
+        assert "可以" in sections["白魔法面霜"]
+        assert "白魔法油皮能用吗" not in sections["云朵洁面"]
+
+    def test_no_sections_returns_empty_dict(self, tmp_path):
+        """无产品FAQ段时按需段为空，常驻段等价全量"""
+        fp = tmp_path / "kbp2.txt"
+        _write(fp, "Q: 一\nA: 答一\n")
+        base, sections = load_knowledge_parts(str(fp))
+        assert sections == {}
+        assert "答一" in base
+
+    def test_hot_reload_by_fingerprint(self, tmp_path):
+        """指纹(mtime,size)变化后分段缓存重建"""
+        fp = tmp_path / "kbp3.txt"
+        _write(fp, _SECTIONED_KB, mtime=1000000.0)
+        _, sections = load_knowledge_parts(str(fp))
+        assert "云朵洁面" in sections
+
+        _write(fp, _SECTIONED_KB.replace("不含", "不含酒精哦"), mtime=1000100.0)
+        _, sections2 = load_knowledge_parts(str(fp))
+        assert "不含酒精哦" in sections2["云朵洁面"]
+
+    def test_missing_file(self, tmp_path):
+        base, sections = load_knowledge_parts(str(tmp_path / "nope.txt"))
+        assert base == "" and sections == {}
+
+    def test_full_load_output_unchanged_by_refactor(self, tmp_path):
+        """重构后 load_knowledge 全量输出行为不变：段标题跳过、全部问答编号保留"""
+        fp = tmp_path / "kbp4.txt"
+        _write(fp, _SECTIONED_KB)
+        text = load_knowledge(str(fp))
+        assert "产品FAQ" not in text  # 段标题是注释，不进全量输出
+        for kw in ("通用答案", "云朵洁面含酒精吗", "白魔法油皮能用吗"):
+            assert kw in text

@@ -481,3 +481,189 @@ class TestOrderFlowAccountGate:
 
         assert any("哪个平台购买" in s for s in sent)
         assert store.kv_get(f"orderflow:{KFID}:u-of-gate-b")
+
+
+class TestNativeLengthSplit:
+    """微信原生约束：企微客服 send_msg 文本上限 2048 字节，超长自动拆条发送"""
+
+    def test_short_content_single_message(self, monkeypatch):
+        from src.core import _do_send_kf
+
+        calls = []
+        monkeypatch.setattr(
+            "src.wecom.wxkf.send_message",
+            lambda **kw: calls.append(kw) or True,
+        )
+        assert _do_send_kf(KFID, "u1", "短回复", msgid="m-1") is True
+        assert len(calls) == 1
+        assert calls[0]["content"] == "短回复" and calls[0]["msgid"] == "m-1"
+
+    def test_long_content_split_with_msgid_first_only(self, monkeypatch):
+        from src.core import _do_send_kf
+
+        calls = []
+        monkeypatch.setattr(
+            "src.wecom.wxkf.send_message",
+            lambda **kw: calls.append(kw) or True,
+        )
+        # 3000 中文字 ≈ 9000 字节，远超 2000 字节阈值
+        long_reply = "长" * 3000
+        assert _do_send_kf(KFID, "u1", long_reply, msgid="m-2") is True
+
+        assert len(calls) > 1
+        # 每条都不超原生上限（预留 buffer 后 2000 字节）
+        assert all(len(c["content"].encode("utf-8")) <= 2000 for c in calls)
+        # 内容不丢：拼回等于原文
+        assert "".join(c["content"] for c in calls) == long_reply
+        # msgid 只挂第一条，后续不带引用
+        assert calls[0]["msgid"] == "m-2"
+        assert all(c["msgid"] == "" for c in calls[1:])
+
+    def test_split_prefers_line_boundary(self):
+        from src.core import _split_kf_content
+
+        content = "\n".join([f"第{i}行内容" for i in range(200)])  # 多行超长文本
+        parts = _split_kf_content(content)
+        assert len(parts) > 1
+        assert all(len(p.encode("utf-8")) <= 2000 for p in parts)
+        # 按行拆：拼回后与原文一致（含换行）
+        assert "\n".join(parts) == content
+
+    def test_single_huge_line_hard_cut(self):
+        from src.core import _split_kf_content
+
+        content = "字" * 5000  # 单行 15000 字节，无换行可拆
+        parts = _split_kf_content(content)
+        assert len(parts) > 1
+        assert all(len(p.encode("utf-8")) <= 2000 for p in parts)
+        assert "".join(parts) == content
+
+    def test_split_failure_returns_false(self, monkeypatch):
+        """任一分片发送失败即返回 False，由调用方 msgid_release 回滚"""
+        from src.core import _do_send_kf
+
+        n = {"i": 0}
+
+        def fake_send(**kw):
+            n["i"] += 1
+            return n["i"] == 1  # 第二条失败
+
+        monkeypatch.setattr("src.wecom.wxkf.send_message", fake_send)
+        assert _do_send_kf(KFID, "u1", "长" * 3000, msgid="m-3") is False
+
+
+class TestMetricsInstrumentation:
+    """业务指标埋点：接待/限流/AI成败/转人工/orderflow 端到端计数"""
+
+    @staticmethod
+    def _delta(name: str, before: dict) -> int:
+        from src import metrics
+
+        return metrics.snapshot().get(name, 0) - before.get(name, 0)
+
+    def test_normal_reply_counts_received_and_ok(self, monkeypatch):
+        from src import metrics
+
+        before = metrics.snapshot()
+        sent = []
+        _patch_common(monkeypatch, sent)
+        monkeypatch.setattr("src.core.chat", lambda messages: "AI回复")
+        _patch_sync(monkeypatch, [_text_msg("m-mt-ok", euid="u-mt-ok")])
+
+        process_kf_messages("t1", KFID)
+
+        assert sent == ["AI回复"]
+        assert self._delta(metrics.KF_MSG_RECEIVED, before) == 1
+        assert self._delta(metrics.AI_REPLY_OK, before) == 1
+        assert self._delta(metrics.AI_FAILURE, before) == 0
+
+    def test_ratelimit_hit_counted(self, monkeypatch):
+        from src import metrics
+
+        before = metrics.snapshot()
+        sent = []
+        _patch_common(monkeypatch, sent)
+        monkeypatch.setattr("src.core.check_rate_limit", lambda uid, t=0: True)
+        _patch_sync(monkeypatch, [_text_msg("m-mt-rl", euid="u-mt-rl")])
+
+        process_kf_messages("t1", KFID)
+
+        assert self._delta(metrics.RATELIMIT_HIT, before) == 1
+        # 限流消息不调 AI
+        assert self._delta(metrics.AI_REPLY_OK, before) == 0
+
+    def test_transfer_requested_and_success_counted(self, monkeypatch):
+        from src import metrics
+
+        before = metrics.snapshot()
+        sent = []
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr("src.core.is_within_service_hours", lambda: True)
+        monkeypatch.setattr("src.wecom.wxkf.transfer_session", lambda **kw: True)
+        monkeypatch.setattr("src.wecom.wxkf.send_agent_notice", lambda **kw: True)
+        _patch_sync(monkeypatch, [_text_msg("m-mt-tr", content="转人工", euid="u-mt-tr")])
+
+        process_kf_messages("t1", KFID)
+
+        assert self._delta(metrics.TRANSFER_REQUESTED, before) == 1
+        assert self._delta(metrics.TRANSFER_SUCCESS, before) == 1
+        assert self._delta(metrics.TRANSFER_FAILED, before) == 0
+
+    def test_transfer_outside_hours_counted_failed(self, monkeypatch):
+        from src import metrics
+
+        before = metrics.snapshot()
+        sent = []
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr("src.core.is_within_service_hours", lambda: False)
+        _patch_sync(monkeypatch, [_text_msg("m-mt-tr2", content="转人工", euid="u-mt-tr2")])
+
+        process_kf_messages("t1", KFID)
+
+        assert self._delta(metrics.TRANSFER_REQUESTED, before) == 1
+        assert self._delta(metrics.TRANSFER_FAILED, before) == 1
+        assert self._delta(metrics.TRANSFER_SUCCESS, before) == 0
+
+    def test_ai_failure_counted(self, monkeypatch):
+        from src import metrics
+
+        before = metrics.snapshot()
+        sent = []
+        _patch_common(monkeypatch, sent)
+
+        def boom(messages):
+            raise core.AIServiceError("boom")
+
+        monkeypatch.setattr("src.core.chat", boom)
+        monkeypatch.setattr("src.core._handle_kf_transfer", lambda *a, **k: False)
+        _patch_sync(monkeypatch, [_text_msg("m-mt-af", euid="u-mt-af")])
+
+        process_kf_messages("t1", KFID)
+
+        assert self._delta(metrics.AI_FAILURE, before) == 1
+        assert self._delta(metrics.AI_REPLY_OK, before) == 0
+
+    def test_orderflow_started_counted(self, monkeypatch):
+        from src import metrics
+
+        before = metrics.snapshot()
+        sent = []
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr("src.core.chat", lambda messages: "AI回复")
+        _patch_sync(monkeypatch, [_text_msg("m-mt-of", content="查订单", euid="u-mt-of")])
+
+        process_kf_messages("t1", KFID)  # 品牌账号 order_flow: true → 进入流程
+
+        assert self._delta(metrics.ORDERFLOW_STARTED, before) == 1
+
+    def test_wx_path_counts_received_and_ok(self, monkeypatch):
+        from src import metrics
+
+        before = metrics.snapshot()
+        monkeypatch.setattr("src.core.chat", lambda messages: "你好！")
+        msg = TextMessage(from_user="wx-u-mt", content="你好", msg_id="wxmsg-mt-1")
+
+        assert process_message(msg) == "你好！"
+
+        assert self._delta(metrics.WX_MSG_RECEIVED, before) == 1
+        assert self._delta(metrics.AI_REPLY_OK, before) == 1

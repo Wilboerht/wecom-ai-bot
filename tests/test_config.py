@@ -85,8 +85,8 @@ class TestKfAccountsLoading:
         result = _import_config({"KF_ACCOUNTS_FILE": str(accounts_file)})
         assert result.returncode == 0, result.stdout + result.stderr
 
-    def test_missing_knowledge_file_only_warns(self, tmp_path):
-        """knowledge_file 路径不存在只打 warning，不阻断启动"""
+    def test_missing_knowledge_file_blocks_startup(self, tmp_path):
+        """knowledge_file 路径不存在阻断启动：空知识库静默降级比启动失败更危险"""
         accounts_file = tmp_path / "accounts.json"
         accounts_file.write_text(
             '{"wkTest123": {"welcome": "hi", "system_prompt": "p",'
@@ -94,4 +94,81 @@ class TestKfAccountsLoading:
             encoding="utf-8",
         )
         result = _import_config({"KF_ACCOUNTS_FILE": str(accounts_file)})
+        assert result.returncode != 0
+        assert "knowledge_file 不存在" in result.stdout
+
+    def test_missing_prompt_both_rejected(self, tmp_path):
+        """system_prompt 与 system_prompt_file 都缺失 → 阻断"""
+        knowledge = tmp_path / "knowledge.txt"
+        knowledge.write_text("知识库", encoding="utf-8")
+        accounts_file = tmp_path / "accounts.json"
+        accounts_file.write_text(
+            json.dumps({"wkTest123": {
+                "welcome": "hi",
+                "knowledge_file": knowledge.as_posix(),
+            }}),
+            encoding="utf-8",
+        )
+        result = _import_config({"KF_ACCOUNTS_FILE": str(accounts_file)})
+        assert result.returncode != 0
+        assert "system_prompt 或 system_prompt_file" in result.stdout
+
+    def test_prompt_file_missing_only_warns(self, tmp_path):
+        """system_prompt_file 不存在不阻断：运行期回退内联/默认提示词"""
+        knowledge = tmp_path / "knowledge.txt"
+        knowledge.write_text("知识库", encoding="utf-8")
+        accounts_file = tmp_path / "accounts.json"
+        accounts_file.write_text(
+            json.dumps({"wkTest123": {
+                "welcome": "hi",
+                "system_prompt_file": "prompts/not_exists.txt",
+                "knowledge_file": knowledge.as_posix(),
+            }}),
+            encoding="utf-8",
+        )
+        result = _import_config({"KF_ACCOUNTS_FILE": str(accounts_file)})
         assert result.returncode == 0, result.stdout + result.stderr
+
+    def test_bool_field_wrong_type_rejected(self, tmp_path):
+        """order_flow/knowledge_split/advisor_report 非布尔 → 阻断"""
+        knowledge = tmp_path / "knowledge.txt"
+        knowledge.write_text("知识库", encoding="utf-8")
+        accounts_file = tmp_path / "accounts.json"
+        accounts_file.write_text(
+            json.dumps({"wkTest123": {
+                "welcome": "hi",
+                "system_prompt": "p",
+                "knowledge_file": knowledge.as_posix(),
+                "order_flow": "yes",
+            }}),
+            encoding="utf-8",
+        )
+        result = _import_config({"KF_ACCOUNTS_FILE": str(accounts_file)})
+        assert result.returncode != 0
+        assert "order_flow 必须是布尔值" in result.stdout
+
+    def test_list_field_wrong_type_rejected(self, tmp_path):
+        """service_userid/transfer_keywords 类型错误 → 阻断"""
+        knowledge = tmp_path / "knowledge.txt"
+        knowledge.write_text("知识库", encoding="utf-8")
+        accounts_file = tmp_path / "accounts.json"
+        accounts_file.write_text(
+            json.dumps({"wkTest123": {
+                "welcome": "hi",
+                "system_prompt": "p",
+                "knowledge_file": knowledge.as_posix(),
+                "transfer_keywords": {"k": 1},
+            }}),
+            encoding="utf-8",
+        )
+        result = _import_config({"KF_ACCOUNTS_FILE": str(accounts_file)})
+        assert result.returncode != 0
+        assert "transfer_keywords 必须是字符串或字符串数组" in result.stdout
+
+    def test_account_not_dict_rejected(self, tmp_path):
+        """账号配置非 JSON 对象 → 阻断"""
+        accounts_file = tmp_path / "accounts.json"
+        accounts_file.write_text('{"wkTest123": "just a string"}', encoding="utf-8")
+        result = _import_config({"KF_ACCOUNTS_FILE": str(accounts_file)})
+        assert result.returncode != 0
+        assert "必须是 JSON 对象" in result.stdout

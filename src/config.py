@@ -46,6 +46,8 @@ class Config:
         self.SESSION_TTL = self._require_int("SESSION_TTL", 1800)
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
         self.REDIS_URL = os.getenv("REDIS_URL", "")
+        # 业务指标定期日志间隔（秒），0 关闭；非法值回退默认不阻断
+        self.METRICS_LOG_INTERVAL = self._optional_int("METRICS_LOG_INTERVAL", 300)
         self.SERVICE_START_HOUR = self._require_int("SERVICE_START_HOUR", 10)
         self.SERVICE_END_HOUR = self._require_int("SERVICE_END_HOUR", 20)
         self._validate_service_hours()
@@ -134,11 +136,23 @@ class Config:
                 )
             knowledge_file = account["knowledge_file"]
             if not os.path.exists(knowledge_file):
-                # 不阻断：多账号配置里可能有暂未启用的账号
-                logger.warning(
-                    "%s 中账号 %s 的 knowledge_file 不存在: %s",
-                    path, open_kfid, knowledge_file,
+                # 阻断：知识库是回复质量的地基，运行期静默降级成空知识库比启动失败更危险
+                raise ConfigError(
+                    f"客服账号配置文件 {path} 中账号 {open_kfid} 的 knowledge_file 不存在: {knowledge_file}"
                 )
+            # 字段类型校验：类型错误在运行期会产生难排查的隐性故障，启动即拦
+            for field in ("service_userid", "transfer_keywords"):
+                value = account.get(field)
+                if value is not None and not isinstance(value, (list, str)):
+                    raise ConfigError(
+                        f"客服账号配置文件 {path} 中账号 {open_kfid} 的 {field} 必须是字符串或字符串数组"
+                    )
+            for field in ("order_flow", "knowledge_split", "advisor_report"):
+                value = account.get(field)
+                if value is not None and not isinstance(value, bool):
+                    raise ConfigError(
+                        f"客服账号配置文件 {path} 中账号 {open_kfid} 的 {field} 必须是布尔值 true/false"
+                    )
 
     def get_account(self, open_kfid: str) -> dict:
         """获取客服账号配置，未匹配时返回 _default"""

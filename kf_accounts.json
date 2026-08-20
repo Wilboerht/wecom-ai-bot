@@ -52,7 +52,8 @@
       "海关"
     ],
     "system_prompt_file": "prompts/brand_cs.txt",
-    "order_flow": true
+    "order_flow": true,
+    "knowledge_split": true
   },
   "kfcb074403c752c0645": {
     "name": "品牌咨询",
@@ -102,7 +103,8 @@
       "用不了"
     ],
     "system_prompt_file": "prompts/brand_cs.txt",
-    "order_flow": true
+    "order_flow": true,
+    "knowledge_split": true
   },
   "wkBpRSVwAAeouflfh1MDy58qaCx7oKTA": {
     "name": "护肤顾问",

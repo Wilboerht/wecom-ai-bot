@@ -60,6 +60,56 @@ class TestStartupWarning:
         assert not any("单 worker" in r.message for r in caplog.records)
 
 
+class TestMetricsEndpoint:
+    """业务指标端点：x-internal-key 鉴权 + 计数器/派生率输出"""
+
+    @pytest.mark.asyncio
+    async def test_unauthorized_without_key(self, client, monkeypatch):
+        monkeypatch.setattr("src.main.config.INTERNAL_API_KEY", "secret-key")
+        resp = await client.get("/metrics")
+        assert resp.status_code == 401
+        assert resp.json() == {"error": "unauthorized"}
+
+    @pytest.mark.asyncio
+    async def test_unauthorized_with_wrong_key(self, client, monkeypatch):
+        monkeypatch.setattr("src.main.config.INTERNAL_API_KEY", "secret-key")
+        resp = await client.get("/metrics", headers={"x-internal-key": "wrong"})
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_unauthorized_when_key_not_configured(self, client, monkeypatch):
+        """INTERNAL_API_KEY 未配置时一律拒绝，不允许匿名读指标"""
+        monkeypatch.setattr("src.main.config.INTERNAL_API_KEY", "")
+        resp = await client.get("/metrics", headers={"x-internal-key": ""})
+        assert resp.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_returns_counters_and_rates(self, client, monkeypatch):
+        from src import metrics
+
+        monkeypatch.setattr("src.main.config.INTERNAL_API_KEY", "secret-key")
+        metrics.snapshot(reset=True)
+        monkeypatch.setattr(metrics, "_counters", {
+            metrics.KF_MSG_RECEIVED: 10,
+            metrics.AI_REPLY_OK: 9,
+            metrics.AI_FAILURE: 1,
+            metrics.TRANSFER_SUCCESS: 2,
+            metrics.ORDERFLOW_STARTED: 4,
+            metrics.ORDERFLOW_COMPLETED: 1,
+        })
+
+        resp = await client.get("/metrics", headers={"x-internal-key": "secret-key"})
+
+        metrics.snapshot(reset=True)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["counters"]["kf_msg_received"] == 10
+        assert data["rates"]["ai_failure_rate"] == 0.1
+        assert data["rates"]["transfer_rate"] == 0.2
+        assert data["rates"]["orderflow_conversion"] == 0.25
+        assert "uptime_seconds" in data
+
+
 class TestHealthEndpoint:
     @pytest.mark.asyncio
     async def test_health_ok(self, client):

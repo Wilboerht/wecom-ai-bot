@@ -19,6 +19,7 @@ from .wecom.crypto import WXBizMsgCrypt
 from .core import handle_callback, process_kf_messages
 from .links import load_links, get_target
 from .ai import store
+from . import metrics
 
 logging.basicConfig(
     level=getattr(logging, config.LOG_LEVEL.upper(), logging.INFO),
@@ -87,6 +88,21 @@ async def catch_errors(request: Request, call_next):
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+async def metrics_endpoint(x_internal_key: str = Header("", alias="x-internal-key")):
+    """业务指标（接待量/AI失败率/转人工率/限流命中/orderflow转化等），x-internal-key 鉴权"""
+    # 同 /api/kf-link：encode 防非 ASCII key 抛 TypeError
+    if not config.INTERNAL_API_KEY or not hmac.compare_digest(
+        x_internal_key.encode("utf-8", "ignore"), config.INTERNAL_API_KEY.encode()
+    ):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+    return metrics.summary()
+
+
+# 定期把指标汇总打一行日志（METRICS_LOG_INTERVAL 秒，0 关闭）；不必翻日志即可看趋势
+metrics.start_periodic_logger(config.METRICS_LOG_INTERVAL)
 
 
 # ---- 客服链接生成（供 advisor 子站服务端代理调用） ----
