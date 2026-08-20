@@ -109,6 +109,24 @@ class TestBuildProfileFields:
         assert "生理周期" not in fields
         assert not any("⚠️" in v for v in fields.values())
 
+    def test_allergies_mixed_with_no_history_still_warns(self):
+        """上游返回 ["无过敏史", "花粉"] 这类组合时，含真实过敏原，仍应加 ⚠️"""
+        report = {
+            "found": True,
+            "questionnaire": {"allergies": ["无过敏史", "花粉"]},
+        }
+        fields = advisor_report.build_profile_fields(report)
+        assert fields["过敏史"] == "⚠️无过敏史、花粉"
+
+    def test_allergies_all_negative_no_warning(self):
+        """全部是否定表述（无过敏史/无）时不加 ⚠️"""
+        report = {
+            "found": True,
+            "questionnaire": {"allergies": ["无过敏史", "无"]},
+        }
+        fields = advisor_report.build_profile_fields(report)
+        assert fields["过敏史"] == "无过敏史、无"
+
     def test_concerns_fallback_when_no_issues(self):
         fields = advisor_report.build_profile_fields(
             {"found": True, "concerns": ["T区出油", "毛孔粗大"], "dataSource": "questionnaire"}
@@ -206,13 +224,7 @@ class TestHandleEnterSession:
         assert "小雨" in sent["content"]
 
     def test_invalid_scene_param_ignored(self, monkeypatch):
-        monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: FAKE_REPORT)
-        advisor_report.handle_enter_session(
-            "kfc7834894b7ee2b86a", "wm_user_1",
-            {"scene_param": "bad!param", "welcome_code": "wcode"},
-        )
-        # _fetch_report 不应被调用（上面的 lambda 若被调用会返回 FAKE_REPORT 但无断言点，
-        # 此处通过 spy 验证）
+        # 非法 scene_param 应被直接忽略，_fetch_report 不应被调用（spy 验证）
         calls = []
         monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: calls.append(sid))
         advisor_report.handle_enter_session(

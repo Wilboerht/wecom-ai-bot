@@ -160,7 +160,10 @@ def build_profile_fields(report: dict) -> dict:
         allergies = [str(a) for a in (q.get("allergies") or []) if a]
         if allergies:
             text = "、".join(allergies)
-            fields["过敏史"] = text if allergies == ["无过敏史"] else f"⚠️{text}"
+            # 按是否含真实过敏原判断：上游可能返回 ["无过敏史", "花粉"] 这类组合，
+            # 此时仍应加 ⚠️；全部是否定表述（无过敏史/无）才不加
+            has_real_allergen = any(a not in ("无过敏史", "无") for a in allergies)
+            fields["过敏史"] = f"⚠️{text}" if has_real_allergen else text
         pregnancy = q.get("pregnancy")
         if pregnancy and pregnancy != "否":
             fields["孕期状态"] = f"⚠️{pregnancy}"

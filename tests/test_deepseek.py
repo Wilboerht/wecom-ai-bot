@@ -126,16 +126,20 @@ class TestSessionManager:
         ctx = session_get(uid)
         assert len(ctx) <= 20
 
-    def test_reset(self):
-        from src.ai.store import session_add, session_get
-        import uuid
-        uid = "test_" + uuid.uuid4().hex[:8]
-        session_add(uid, "user", "test")
-        assert len(session_get(uid)) >= 1
+    # 注：旧 SessionManager.reset() 已随 session.py 删除（commit 4b1726e），
+    # store.py 无 reset 等价接口，原 test_reset 只是重复 add/get 假断言，已移除。
 
     def test_ttl_expiry(self):
-        from src.ai.store import session_add, session_get
+        """内存模式 TTL 过期：把会话最后活跃时间回拨到 SESSION_TTL 之前，
+        session_get 触发惰性清理后应返回空"""
+        import time
         import uuid
+        from src.ai import store
+        from src.config import config
+
         uid = "test_" + uuid.uuid4().hex[:8]
-        session_add(uid, "user", "test")
-        assert len(session_get(uid)) >= 1
+        store.session_add(uid, "user", "test")
+        assert len(store.session_get(uid)) == 1
+
+        store._inmem_session_ttl[uid] = time.time() - config.SESSION_TTL - 1
+        assert store.session_get(uid) == []

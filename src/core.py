@@ -26,29 +26,31 @@ from .links import shorten_text, load_links
 
 logger = logging.getLogger(__name__)
 
-_account_prompts: dict[str, str] = {}
+# cache_key -> (知识库内容, 系统提示词)；知识库热加载后内容变化即重建
+_account_prompts: dict[str, tuple[str, str]] = {}
 
 
 # ---- 系统提示词 ----
 def get_system_prompt(open_kfid: str = "") -> str:
-    """获取指定客服账号的系统提示词（含知识库），结果缓存"""
+    """获取指定客服账号的系统提示词（含知识库）
+
+    每次调用都经 load_knowledge 热加载（内部按 mtime 缓存，开销可忽略），
+    知识库内容变化时重建 prompt，文件不变时命中 (知识库内容, prompt) 缓存
+    """
     account = config.get_account(open_kfid)
     prompt = account.get("system_prompt", "") or config.SYSTEM_PROMPT
     knowledge_file = account.get("knowledge_file", "knowledge.txt")
 
     cache_key = f"{open_kfid}:{knowledge_file}"
-    if cache_key in _account_prompts:
-        return _account_prompts[cache_key]
+    knowledge = load_knowledge(knowledge_file) if knowledge_file else ""
 
-    if knowledge_file:
-        knowledge = load_knowledge(knowledge_file)
-        if knowledge:
-            result = prompt + "\n\n" + knowledge
-            _account_prompts[cache_key] = result
-            return result
+    cached = _account_prompts.get(cache_key)
+    if cached and cached[0] == knowledge:
+        return cached[1]
 
-    _account_prompts[cache_key] = prompt
-    return prompt
+    result = prompt + "\n\n" + knowledge if knowledge else prompt
+    _account_prompts[cache_key] = (knowledge, result)
+    return result
 
 
 # ---- 速率限制 ----
@@ -282,12 +284,15 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             store.msgid_release(msg_id)
             return
 
+        # 转人工跨批次标记: 转接成功后 state=3 生效有延迟, 300s 内按人工接待对待
+        transferred = bool(store.kv_get(f"kf:transferred:{open_kfid}:{external_userid}"))
+
         # 非文本消息 — 只记录元信息不存内容，仅对2分钟内的发一次引导
         if msg.get("msgtype") != "text":
             msgtype = msg.get("msgtype", "unknown")
             # 安全层：永不上报图片/语音到 Redis 或日志，只记类型
             logger.info("KF media received: type=%s user=%s (content NOT stored)", msgtype, external_userid)
-            if state != 3 and (not send_time or time.time() - send_time < 120):
+            if state != 3 and not transferred and (not send_time or time.time() - send_time < 120):
                 if not _do_send_kf(open_kfid, external_userid, "暂不支持图片/语音，请用文字描述您的问题。如需人工顾问，请回复「转人工」。"):
                     store.msgid_release(msg_id)
             return
@@ -305,16 +310,16 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 store.msgid_release(msg_id)
             return
 
-        # 转人工关键词（账号级配置，品牌客服含纠纷场景词）
-        transfer_keywords = account.get("transfer_keywords") or ["转人工", "人工客服", "人工服务", "找人工", "人工", "真人", "转接", "有人吗"]
+        # 转人工关键词（账号级配置，品牌客服含纠纷场景词）；裸「人工」不做子串匹配，避免误伤「人工智能/人工合成」
+        transfer_keywords = account.get("transfer_keywords") or ["转人工", "人工客服", "人工服务", "真人客服", "找人工", "真人", "转接", "有人吗"]
 
         logger.info("KF state=%s user=%s text_len=%d", state, external_userid, len(user_text))
 
         if external_userid in _transferred_in_batch:
             return
 
-        if state == 3:
-            # 人工接待中：客户消息由人工客服在工作台处理，机器人不回复、不结束会话、不打断
+        if state == 3 or transferred:
+            # 人工接待中（或刚转接成功、state 尚未生效）：机器人不回复、不结束会话、不打断
             return
 
         if state in (0, 1):
@@ -324,7 +329,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 store.privacy_notice_accept(open_kfid, external_userid)
 
             # AI 可处理
-            if any(kw in user_text for kw in transfer_keywords) and not _is_policy_question(user_text):
+            if _transfer_requested(user_text, transfer_keywords) and not _is_policy_question(user_text):
                 logger.info("KF transfer triggered: user=%s text_len=%d", external_userid, len(user_text))
                 _transferred_in_batch.add(external_userid)
                 _handle_kf_transfer(open_kfid, external_userid, candidates, _merge_flow_context(external_userid, user_text))
@@ -344,6 +349,9 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             if profile:
                 parts = []
                 for k, v in profile.items():
+                    # 档案值来自 AI 回复的 [档案:...] 标签（间接注入面）：
+                    # 拼进 prompt 前去换行并截断，防止伪造 system 指令
+                    v = " ".join(str(v).split())[:100]
                     parts.append(f"{k}: {v}")
                 profile_text = "【该用户的护肤档案】" + "；".join(parts) + "。依据档案个性化推荐，如档案信息变化请在回复末尾建议更新。"
 
@@ -406,6 +414,9 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             cursor = data.get("next_cursor", "")
             if not data.get("has_more") or not cursor:
                 break
+        else:
+            # 达到页数上限仍有 has_more：可能有消息积压被丢弃，需人工关注
+            logger.warning("KF 消息分页达到上限仍有 has_more: open_kfid=%s, 可能有消息积压未处理", open_kfid)
     except Exception as e:
         # sync_messages 重试耗尽抛 WecomApiError 等：记 error 优雅结束，等下次回调
         logger.error("KF 消息拉取/处理失败: open_kfid=%s err=%s", open_kfid, e)
@@ -505,6 +516,8 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
         return
 
     store.set_last_agent(external_userid, chosen)
+    # 跨批次标记: state=3 生效有延迟, TTL 内命中则机器人不再回复（消息处理开头检查）
+    store.kv_set(f"kf:transferred:{open_kfid}:{external_userid}", "1", TRANSFERRED_MARK_TTL)
     # 客户侧只看到转接提示；问题上下文通过企业微信应用消息单独发给客服
     _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
     if user_text:
@@ -522,6 +535,8 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
 
 # ---- 订单查询引导流程 ----
 ORDER_FLOW_TTL = 600
+# 转人工跨批次标记 TTL（秒）：覆盖 state=3 生效前的延迟窗口
+TRANSFERRED_MARK_TTL = 300
 ORDER_TRIGGERS = (
     "查订单", "查询订单", "查单", "订单号", "订单进度",
     "查物流", "物流信息", "快递单号", "快递到哪", "物流到哪",
@@ -560,6 +575,18 @@ def _order_triggered(text: str) -> bool:
     p1 = re.search(r"(查询|查|看|找|跟踪).{0,8}(订单|物流|快递)", text)
     p2 = re.search(r"(订单|物流|快递).{0,8}(查询|查|看|找)", text)
     return bool(p1 or p2)
+
+
+# ---- 转人工判定 ----
+def _transfer_requested(text: str, keywords: list) -> bool:
+    """转人工判定：关键词子串匹配；消息整体就是「人工」也触发（隐私声明里写的触发词）
+
+    裸「人工」不参与子串匹配（即使账号配置里带了也过滤掉），
+    避免误伤「人工智能」「人工合成」等正常咨询
+    """
+    if text.strip() == "人工":
+        return True
+    return any(kw in text for kw in keywords if kw.strip() != "人工")
 
 
 # ---- 政策咨询（不触发转人工） ----

@@ -29,13 +29,20 @@ app = FastAPI(title="NIHPLOD AI 客服", docs_url=None, redoc_url=None)
 
 load_links()
 
+# 未配置 Redis 时去重/限流/会话全部落在进程内存，多 worker 部署下各进程状态不一致
+if not config.REDIS_URL:
+    logger.warning("未配置 REDIS_URL：去重/限流/会话为进程内存模式，仅适用于单 worker 部署；多 worker 部署请配置 Redis")
+
 
 @app.get("/l/{code}")
-async def short_link(code: str):
+async def short_link(code: str, request: Request):
     """短链跳转: /l/{code} → 真实购买链接"""
     url = get_target(code)
     if not url:
+        logger.info("短链未命中: code=%s", code)
         return Response(content="链接不存在", status_code=404)
+    # 转化统计：只记 code 与 UA，不记 IP 等 PII（nginx 已做 real_ip）
+    logger.info("短链点击: code=%s ua=%s", code, request.headers.get("user-agent", "-"))
     return RedirectResponse(url=url, status_code=302)
 
 crypto_wecom = WXBizMsgCrypt(

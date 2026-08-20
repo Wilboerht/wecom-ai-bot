@@ -186,3 +186,88 @@ class TestProcessMessage:
         assert process_message(msg) is None
         assert calls["n"] == 1
         assert len(store.session_get("wx-u-dup")) == 2
+
+
+class TestTransferKeywords:
+    """转人工关键词：精确「人工」触发，「人工智能」不误触发"""
+
+    def _run(self, monkeypatch, text: str, euid: str):
+        """跑一条文本消息，返回 (发送记录, 转人工记录, AI调用次数)"""
+        sent, transfers, calls = [], [], {"n": 0}
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr(
+            "src.core._handle_kf_transfer",
+            lambda kfid, uid, candidates, ctx="": transfers.append(uid),
+        )
+
+        def fake_chat(messages):
+            calls["n"] += 1
+            return "AI回复"
+
+        monkeypatch.setattr("src.core.chat", fake_chat)
+        _patch_sync(monkeypatch, [_text_msg(f"m-kw-{euid}", content=text, euid=euid)])
+        process_kf_messages("t1", KFID)
+        return sent, transfers, calls["n"]
+
+    def test_ai_keyword_does_not_trigger(self, monkeypatch):
+        """「人工智能」「人工合成」等含「人工」的正常咨询不触发转人工"""
+        sent, transfers, chat_calls = self._run(monkeypatch, "这款产品有人工合成成分吗，跟人工智能有关系吗", "u-kw-ai")
+        assert transfers == []
+        assert chat_calls == 1
+        assert sent == ["AI回复"]
+
+    def test_exact_rengong_triggers(self, monkeypatch):
+        """消息整体就是「人工」时触发（与隐私声明文案一致）"""
+        sent, transfers, chat_calls = self._run(monkeypatch, "人工", "u-kw-exact")
+        assert transfers == ["u-kw-exact"]
+        assert chat_calls == 0
+
+    def test_zhuanrengong_triggers(self, monkeypatch):
+        """「转人工」关键词子串触发"""
+        sent, transfers, chat_calls = self._run(monkeypatch, "我要转人工", "u-kw-zhuan")
+        assert transfers == ["u-kw-zhuan"]
+        assert chat_calls == 0
+
+
+class TestTransferredMarker:
+    """转人工跨批次标记：state=3 生效前机器人不再回复"""
+
+    def test_marker_hit_skips_bot_reply(self, monkeypatch):
+        """预置 kf:transferred 标记后，state 仍为 1 的消息也跳过机器人回复"""
+        store.kv_set(f"kf:transferred:{KFID}:u-marked", "1", 300)
+        sent = []
+        _patch_common(monkeypatch, sent, state=1)
+        calls = {"n": 0}
+
+        def fake_chat(messages):
+            calls["n"] += 1
+            return "AI回复"
+
+        monkeypatch.setattr("src.core.chat", fake_chat)
+        _patch_sync(monkeypatch, [_text_msg("m-marked-1", euid="u-marked")])
+
+        process_kf_messages("t1", KFID)
+        assert sent == []
+        assert calls["n"] == 0
+
+    def test_transfer_success_writes_marker(self, monkeypatch):
+        """转接成功后写入跨批次标记，下一批次同用户消息被跳过"""
+        sent = []
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr("src.core.is_within_service_hours", lambda: True)
+        monkeypatch.setattr("src.wecom.wxkf.transfer_session", lambda **kw: True)
+        monkeypatch.setattr("src.wecom.wxkf.send_agent_notice", lambda **kw: True)
+        _patch_sync(monkeypatch, [_text_msg("m-tmark-1", content="转人工", euid="u-tmark")])
+
+        process_kf_messages("t1", KFID)
+        assert store.kv_get(f"kf:transferred:{KFID}:u-tmark") == "1"
+
+        # 下一批次 state 仍为 1（转接生效有延迟）：机器人不回复
+        calls = {"n": 0}
+        monkeypatch.setattr(
+            "src.core.chat",
+            lambda messages: calls.__setitem__("n", calls["n"] + 1) or "AI回复",
+        )
+        _patch_sync(monkeypatch, [_text_msg("m-tmark-2", content="还在吗", euid="u-tmark")])
+        process_kf_messages("t2", KFID)
+        assert calls["n"] == 0

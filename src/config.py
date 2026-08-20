@@ -1,8 +1,11 @@
 import os
 import json
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class ConfigError(Exception):
@@ -45,12 +48,13 @@ class Config:
         self.REDIS_URL = os.getenv("REDIS_URL", "")
         self.SERVICE_START_HOUR = self._require_int("SERVICE_START_HOUR", 10)
         self.SERVICE_END_HOUR = self._require_int("SERVICE_END_HOUR", 20)
+        self._validate_service_hours()
 
         # 测肤报告联动（enter_session → scene_param → 拉取报告写档案）
         self.INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
         self.ADVISOR_REPORT_API_URL = os.getenv(
             "ADVISOR_REPORT_API_URL",
-            "https://advisor.nihplod.cn/api/internal/report-summary",
+            "https://advisor-api.example.com/api/internal/report-summary",
         )
         self.KF_ADVISOR_OPEN_KFID = os.getenv("KF_ADVISOR_OPEN_KFID", "")
         self.KF_SCENE = os.getenv("KF_SCENE", "advisor")
@@ -72,11 +76,56 @@ class Config:
         except ValueError:
             return default
 
+    def _validate_service_hours(self) -> None:
+        # core.py is_within_service_hours() 用 start <= hour < end 判断，
+        # 不支持跨午夜窗口（如 22 点到次日 6 点），故要求 0 <= START < END <= 23
+        for name, hour in (
+            ("SERVICE_START_HOUR", self.SERVICE_START_HOUR),
+            ("SERVICE_END_HOUR", self.SERVICE_END_HOUR),
+        ):
+            if not (0 <= hour <= 23):
+                raise ConfigError(f"{name} 必须在 0-23 之间，当前: {hour}")
+        if self.SERVICE_START_HOUR >= self.SERVICE_END_HOUR:
+            raise ConfigError(
+                "SERVICE_START_HOUR 必须小于 SERVICE_END_HOUR（不支持跨午夜），"
+                f"当前: {self.SERVICE_START_HOUR} >= {self.SERVICE_END_HOUR}"
+            )
+
     def _load_accounts(self) -> None:
         path = os.getenv("KF_ACCOUNTS_FILE", "kf_accounts.json")
-        if os.path.exists(path):
+        if not os.path.exists(path):
+            return
+        try:
             with open(path, "r", encoding="utf-8") as f:
-                self._accounts = json.load(f)
+                accounts = json.load(f)
+        except json.JSONDecodeError as e:
+            raise ConfigError(f"客服账号配置文件 {path} 不是合法 JSON: {e}") from None
+        if not isinstance(accounts, dict):
+            raise ConfigError(f"客服账号配置文件 {path} 顶层必须是 JSON 对象")
+        self._accounts = accounts
+        self._validate_accounts(path)
+
+    def _validate_accounts(self, path: str) -> None:
+        for open_kfid, account in self._accounts.items():
+            if not isinstance(account, dict):
+                raise ConfigError(
+                    f"客服账号配置文件 {path} 中账号 {open_kfid} 的配置必须是 JSON 对象"
+                )
+            # _default 是未匹配时的兜底配置（可能只有 welcome），跳过必填字段校验
+            if open_kfid == "_default":
+                continue
+            for field in ("welcome", "system_prompt", "knowledge_file"):
+                if not account.get(field):
+                    raise ConfigError(
+                        f"客服账号配置文件 {path} 中账号 {open_kfid} 缺少必填字段: {field}"
+                    )
+            knowledge_file = account["knowledge_file"]
+            if not os.path.exists(knowledge_file):
+                # 不阻断：多账号配置里可能有暂未启用的账号
+                logger.warning(
+                    "%s 中账号 %s 的 knowledge_file 不存在: %s",
+                    path, open_kfid, knowledge_file,
+                )
 
     def get_account(self, open_kfid: str) -> dict:
         """获取客服账号配置，未匹配时返回 _default"""

@@ -11,6 +11,55 @@ def client():
     return AsyncClient(transport=transport, base_url="http://test")
 
 
+class TestShortLink:
+    @pytest.mark.asyncio
+    async def test_redirect_and_click_log(self, client, monkeypatch, caplog):
+        """命中短链 302 跳转并记 info 点击日志（含 code 与 UA，不含 IP）"""
+        import logging
+
+        monkeypatch.setattr("src.links._links", {"abc": "https://example.com/buy"})
+        with caplog.at_level(logging.INFO, logger="src.main"):
+            resp = await client.get("/l/abc", headers={"User-Agent": "test-agent"})
+        assert resp.status_code == 302
+        assert resp.headers["location"] == "https://example.com/buy"
+        click_logs = [r.message for r in caplog.records if "短链点击" in r.message]
+        assert any("abc" in m and "test-agent" in m for m in click_logs)
+
+    @pytest.mark.asyncio
+    async def test_not_found(self, client, monkeypatch):
+        monkeypatch.setattr("src.links._links", {"abc": "https://example.com/buy"})
+        resp = await client.get("/l/unknown")
+        assert resp.status_code == 404
+
+
+class TestStartupWarning:
+    def test_warn_when_redis_not_configured(self, monkeypatch, caplog):
+        """未配置 REDIS_URL 启动时告警：内存模式仅适用单 worker"""
+        import importlib
+        import logging
+
+        import src.main
+
+        monkeypatch.setattr("src.main.config.REDIS_URL", "")
+        with caplog.at_level(logging.WARNING, logger="src.main"):
+            importlib.reload(src.main)
+        assert any(
+            "REDIS_URL" in r.message and "单 worker" in r.message
+            for r in caplog.records
+        )
+
+    def test_no_warn_when_redis_configured(self, monkeypatch, caplog):
+        import importlib
+        import logging
+
+        import src.main
+
+        monkeypatch.setattr("src.main.config.REDIS_URL", "redis://localhost:6379/0")
+        with caplog.at_level(logging.WARNING, logger="src.main"):
+            importlib.reload(src.main)
+        assert not any("单 worker" in r.message for r in caplog.records)
+
+
 class TestHealthEndpoint:
     @pytest.mark.asyncio
     async def test_health_ok(self, client):

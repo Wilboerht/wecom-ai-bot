@@ -2,7 +2,14 @@
 知识库加载器
 
 从 knowledge.txt 读取品牌 FAQ, 启动时加载, 注入到 System Prompt
-格式: Q: 问题   A: 答案   支持 # 注释
+
+格式约定:
+- Q: 问题 / A: 答案 组成问答对, 答案支持多行续行（A: 行之后的非空行并入上一条答案）
+- 空行是答案的结束符: 空行之后的内容不再并入上一条答案（防止速查表等内容被误并）
+- # 或 = 开头的行为注释/分隔线, 跳过
+- 其他非空行（如产品速查表、禁语表）原样保留
+
+缓存按文件 mtime 热加载: 文件变更后下次读取自动重新解析, 无需重启进程
 """
 import logging
 import os
@@ -10,22 +17,26 @@ import re
 
 logger = logging.getLogger(__name__)
 
-_knowledge_cache: dict[str, str] = {}
+# filepath -> (文件 mtime, 格式化后的知识文本)
+_knowledge_cache: dict[str, tuple[float, str]] = {}
 
 
 def load_knowledge(filepath: str = "knowledge.txt") -> str:
-    """读取知识库文件, 返回格式化的知识文本, 按文件名缓存
+    """读取知识库文件, 返回格式化的知识文本, 按 (文件名, mtime) 缓存
 
     支持两种内容:
-    1. Q:/A: 问答对 — 解析后格式化为编号列表
+    1. Q:/A: 问答对 — 解析后格式化为编号列表, 空行结束上一条答案
     2. 其他非注释行 — 原样保留（如产品速查表、禁语表）
     """
-    if filepath in _knowledge_cache:
-        return _knowledge_cache[filepath]
-
     if not os.path.exists(filepath):
         logger.warning("知识库文件未找到: %s, 使用空知识库", filepath)
         return ""
+
+    # 热加载: mtime 未变直接返回缓存, 变了则重新解析
+    mtime = os.path.getmtime(filepath)
+    cached = _knowledge_cache.get(filepath)
+    if cached and cached[0] == mtime:
+        return cached[1]
 
     entries = []
     raw_lines = []
@@ -36,8 +47,16 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
         for line in f:
             line = line.strip()
 
-            # 跳过空行和注释
-            if not line or line.startswith("#") or line.startswith("="):
+            # 空行: 结束上一条答案（续行不再并入）
+            if not line:
+                if current_q and current_a:
+                    entries.append((current_q, current_a))
+                    current_q = ""
+                    current_a = ""
+                continue
+
+            # 跳过注释和分隔线
+            if line.startswith("#") or line.startswith("="):
                 continue
 
             if line.startswith("Q:") or line.startswith("Q："):
@@ -53,7 +72,7 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
                 else:
                     current_a = line[2:].strip()
             elif current_a:
-                # 续行（多行答案的继续）
+                # 续行（多行答案的继续, 直到空行或下一条 Q:）
                 current_a += "\n" + line
             else:
                 # 非问答内容（如产品速查表）— 原样保留
@@ -80,6 +99,6 @@ def load_knowledge(filepath: str = "knowledge.txt") -> str:
         lines.append(f"   答: {a}")
 
     text = "\n".join(lines)
-    _knowledge_cache[filepath] = text
+    _knowledge_cache[filepath] = (mtime, text)
     logger.info("知识库加载完成 [%s]: %d 条问答, %d 行速查", filepath, len(entries), len(raw_lines))
     return text
