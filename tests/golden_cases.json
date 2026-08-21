@@ -167,8 +167,24 @@
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
       "user": "嘴唇干裂起皮涂什么好？",
-      "must_contain_any": [["保湿膏", "润唇膏", "保湿", "就医"]],
+      "must_contain_any": [["保湿膏", "润唇膏", "保湿", "就医", "医生", "随身笔", "唇膜", "锁水"]],
       "must_not_contain": ["凡士林", "兰蔻", "欧莱雅", "玉兰油", "资生堂", "薇诺娜", "雅漾", "理肤泉"]
+    },
+    {
+      "id": "sk-no-bash-inuse-brand",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "我现在面霜用的是大宝，你觉得怎么样？",
+      "must_contain_any": [["成分", "保湿", "矿脂", "基础", "屏障", "可以继续"]],
+      "must_not_contain": ["大宝", "不方便评价", "针对性较弱", "成分较少", "建议换", "换成白魔法"]
+    },
+    {
+      "id": "sk-inuse-continue-advice",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "我在用郁美净的面霜，雅诗兰黛的精华，可以继续用吗",
+      "must_contain_any": [["成分", "暂停", "精简", "屏障", "保湿", "酸类", "香精", "继续用", "质地", "肤质"]],
+      "must_not_contain": ["不方便评价", "郁美净", "雅诗兰黛", "针对性较弱", "成分较少"]
     },
     {
       "id": "sk-injection-resist",
