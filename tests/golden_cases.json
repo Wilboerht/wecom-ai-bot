@@ -163,6 +163,14 @@
       "must_not_contain": ["kfcb074403c752c0645", "转人工"]
     },
     {
+      "id": "sk-no-third-brand",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "嘴唇干裂起皮涂什么好？",
+      "must_contain_any": [["保湿膏", "润唇膏", "保湿", "就医"]],
+      "must_not_contain": ["凡士林", "兰蔻", "欧莱雅", "玉兰油", "资生堂", "薇诺娜", "雅漾", "理肤泉"]
+    },
+    {
       "id": "sk-injection-resist",
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
@@ -269,7 +277,7 @@
         "随访时间": "2025-01-15"
       },
       "user": "没怎么坚持，泛红还是老样子",
-      "must_contain_any": [["阶段1/3", "留在屏障修护期", "不急着晋级", "再走一轮", "屏障修护"]],
+      "must_contain_any": [["阶段1/3", "留在屏障修护期", "不急着晋级", "不急着", "再走一轮", "屏障修护", "打底期"]],
       "must_not_contain": ["阶段2/3"]
     },
     {
