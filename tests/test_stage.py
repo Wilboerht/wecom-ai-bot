@@ -30,16 +30,57 @@ class TestStageDateValidation:
         assert metrics.snapshot()[metrics.STAGE_FIELD_INVALID] == 1
 
     def test_save_profile_drops_invalid_stage_date(self, monkeypatch):
-        """端到端：AI 回复标签里的非法日期不进档案，合法字段正常写入"""
+        """端到端：AI 回复标签里的非法日期不进档案，合法字段正常写入
+        （阶段名无 N/3 编号时代码不重算日期，模型写的日期走格式校验）"""
         saved = {}
         monkeypatch.setattr(store, "profile_update", lambda k, u, f: saved.update(f))
         reply = core._save_profile_from_reply(
             "wk", "u1",
-            "已记录。[档案: 当前阶段=屏障修护期（阶段1/3）, 阶段开始=两周前, 随访时间=2025-06-15]")
-        assert saved["当前阶段"] == "屏障修护期（阶段1/3）"
+            "已记录。[档案: 当前阶段=屏障修护期, 阶段开始=两周前, 随访时间=2025-06-15]")
+        assert saved["当前阶段"] == "屏障修护期"
         assert saved["随访时间"] == "2025-06-15"
         assert "阶段开始" not in saved  # 「两周前」非法已剔除
         assert "档案" not in reply
+
+    def test_stage_dates_computed_by_code(self, monkeypatch):
+        """写「当前阶段=…（阶段N/3）」时随访时间/阶段开始由代码计算，覆盖模型手算值"""
+        saved = {}
+        monkeypatch.setattr(store, "profile_update", lambda k, u, f: saved.update(f))
+        monkeypatch.setattr(store, "profile_get", lambda k, u: {})
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        core._save_profile_from_reply(
+            "wk", "u1",
+            "方案已出。[档案: 当前阶段=屏障修护期（阶段1/3）, 上次方案=精简修护, 随访时间=2030-01-01]")
+        assert saved["随访时间"] == (today + timedelta(days=14)).isoformat()
+        assert saved["阶段开始"] == today.isoformat()
+
+    def test_stage_dates_follow_stage_number(self, monkeypatch):
+        """进阶期（阶段2/3）随访 +28 天；阶段名变化时阶段开始重置为今天"""
+        saved = {}
+        monkeypatch.setattr(store, "profile_update", lambda k, u, f: saved.update(f))
+        monkeypatch.setattr(
+            store, "profile_get",
+            lambda k, u: {"当前阶段": "屏障修护期（阶段1/3）", "阶段开始": "2025-01-01"},
+        )
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        core._save_profile_from_reply(
+            "wk", "u1", "晋级。[档案: 当前阶段=提亮进阶期（阶段2/3）]")
+        assert saved["随访时间"] == (today + timedelta(days=28)).isoformat()
+        assert saved["阶段开始"] == today.isoformat()
+
+    def test_stage_hold_keeps_original_start_date(self, monkeypatch):
+        """留级（阶段名不变）：随访时间按新一轮重算，但保留原阶段开始日期"""
+        saved = {}
+        monkeypatch.setattr(store, "profile_update", lambda k, u, f: saved.update(f))
+        monkeypatch.setattr(
+            store, "profile_get",
+            lambda k, u: {"当前阶段": "屏障修护期（阶段1/3）", "阶段开始": "2025-01-01"},
+        )
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        core._save_profile_from_reply(
+            "wk", "u1", "再走一轮。[档案: 当前阶段=屏障修护期（阶段1/3）, 阶段开始=2026-01-01]")
+        assert saved["随访时间"] == (today + timedelta(days=14)).isoformat()
+        assert "阶段开始" not in saved  # 模型重写的开始日期被丢弃，档案保留 2025-01-01
 
     def test_comma_in_value_truncation_warned(self, monkeypatch, caplog):
         """字段值含中文逗号会被拆断（标签按逗号拆字段）：截断行为存在且留告警痕迹可观测"""
@@ -104,3 +145,94 @@ class TestBuildProfileBlock:
         text = core.build_profile_block({"上次方案": "先修护屏障两周", "随访时间": "2025-01-01"})
         assert "【当前阶段状态】" not in text
         assert "今天是阶段复评日" in text
+
+
+class TestReviewDueDedup:
+    """复评指令每个随访周期只注入一次：客户「不想谈复评」时模型不写新随访时间，
+    不去重会导致之后每条消息都被强制复评裁决，与 prompt「督促一次不再追问」冲突"""
+
+    def test_marker_not_reinjected_after_touch(self, monkeypatch):
+        """触达标记存在时不再注入；新随访时间（新周期）则重新触发"""
+        monkeypatch.setattr(
+            store, "kv_get",
+            lambda k: "1" if k == "review-due:kf1:u1:2025-01-01" else "",
+        )
+        profile = {"上次方案": "打底修护", "随访时间": "2025-01-01"}
+        assert "阶段复评日" not in core.build_profile_block(profile, "kf1:u1")
+        # 模型写了新随访时间 → 新周期的 key 无标记 → 到期后正常注入
+        profile["随访时间"] = _future_date(0)
+        assert "今天是阶段复评日" in core.build_profile_block(profile, "kf1:u1")
+
+    def test_marked_after_successful_send(self, monkeypatch):
+        """端到端：复评指令随回复成功发出后落标记；同周期下一轮不再注入"""
+        import time
+
+        sent = []
+        kfid, euid = "kfc7834894b7ee2b86a", "u-review-dedup"
+        profile = {"上次方案": "打底修护", "随访时间": "2025-01-01"}
+        monkeypatch.setattr(
+            "src.wecom.wxkf.sync_messages",
+            lambda **kw: {
+                "msg_list": [{
+                    "msgid": "m-review-1",
+                    "msgtype": "text",
+                    "origin": 3,
+                    "external_userid": euid,
+                    "send_time": int(time.time()),
+                    "text": {"content": "你好"},
+                }],
+                "next_cursor": "",
+                "has_more": 0,
+            },
+        )
+        monkeypatch.setattr(
+            "src.core._do_send_kf",
+            lambda k, u, content, msgid="": sent.append(content) or True,
+        )
+        monkeypatch.setattr("src.wecom.wxkf.get_session_state", lambda *a, **k: 1)
+        monkeypatch.setattr("src.core.store.privacy_notice_accepted", lambda k, u: True)
+        monkeypatch.setattr("src.core.store.profile_get", lambda k, u: dict(profile))
+        monkeypatch.setattr("src.core.store.profile_update", lambda *a, **k: None)
+        monkeypatch.setattr("src.core.chat", lambda messages: "好的，先做复评。")
+
+        key = f"review-due:{kfid}:{euid}:2025-01-01"
+        try:
+            core.process_kf_messages("t1", kfid)
+            assert sent and store.kv_get(key) == "1"
+            # 标记落库后，同周期不再注入复评指令
+            assert "阶段复评日" not in core.build_profile_block(profile, f"{kfid}:{euid}")
+        finally:
+            store.kv_delete(key)
+
+    def test_not_marked_when_send_fails(self, monkeypatch):
+        """发送失败不落标记（msgid 回滚允许重推），本周期复评仍会触发"""
+        import time
+
+        kfid, euid = "kfc7834894b7ee2b86a", "u-review-fail"
+        monkeypatch.setattr(
+            "src.wecom.wxkf.sync_messages",
+            lambda **kw: {
+                "msg_list": [{
+                    "msgid": "m-review-2",
+                    "msgtype": "text",
+                    "origin": 3,
+                    "external_userid": euid,
+                    "send_time": int(time.time()),
+                    "text": {"content": "你好"},
+                }],
+                "next_cursor": "",
+                "has_more": 0,
+            },
+        )
+        monkeypatch.setattr("src.core._do_send_kf", lambda *a, **k: False)
+        monkeypatch.setattr("src.wecom.wxkf.get_session_state", lambda *a, **k: 1)
+        monkeypatch.setattr("src.core.store.privacy_notice_accepted", lambda k, u: True)
+        monkeypatch.setattr(
+            "src.core.store.profile_get",
+            lambda k, u: {"上次方案": "打底修护", "随访时间": "2025-01-01"},
+        )
+        monkeypatch.setattr("src.core.store.profile_update", lambda *a, **k: None)
+        monkeypatch.setattr("src.core.chat", lambda messages: "好的，先做复评。")
+
+        core.process_kf_messages("t1", kfid)
+        assert store.kv_get(f"review-due:{kfid}:{euid}:2025-01-01") == ""

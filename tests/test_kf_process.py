@@ -107,8 +107,9 @@ class TestFailureRelease:
         process_kf_messages("t2", KFID)  # 重推重试成功
         assert sent == ["这是AI回复"]
 
-    def test_ai_failure_release_allows_retry(self, monkeypatch):
-        """AI 异常回滚 msgid 并转人工兜底；重推后 AI 恢复可正常回复"""
+    def test_ai_failure_sends_busy_notice_once(self, monkeypatch):
+        """AI 异常：不主动转人工，发一次繁忙提示并保留认领——重推去重跳过不重复打扰，
+        AI 恢复后客户再发新消息可正常回复"""
         sent = []
         calls = {"n": 0}
 
@@ -120,14 +121,25 @@ class TestFailureRelease:
 
         _patch_common(monkeypatch, sent)
         monkeypatch.setattr("src.core.chat", fake_chat)
-        monkeypatch.setattr("src.core._handle_kf_transfer", lambda *a, **k: None)
+        transfer_calls = []
+        monkeypatch.setattr(
+            "src.core._handle_kf_transfer",
+            lambda *a, **k: transfer_calls.append(1) or True,
+        )
         _patch_sync(monkeypatch, [_text_msg("m-ai-fail-1", euid="u-aifail")])
 
-        process_kf_messages("t1", KFID)
-        process_kf_messages("t2", KFID)
+        process_kf_messages("t1", KFID)  # AI 失败 → 繁忙提示
+        assert sent == ["护肤顾问暂时繁忙，这条消息还没能回复您，请稍后再发一次。"]
+        assert transfer_calls == []  # 不主动转人工
 
-        assert calls["n"] == 2
-        assert "AI已恢复" in sent
+        process_kf_messages("t2", KFID)  # 企微重推同一 msgid：已认领去重，不重复发提示
+        assert len(sent) == 1
+        assert calls["n"] == 1
+
+        # AI 恢复后客户再发新消息：正常回复
+        _patch_sync(monkeypatch, [_text_msg("m-ai-fail-2", euid="u-aifail")])
+        process_kf_messages("t3", KFID)
+        assert sent[-1] == "AI已恢复"
 
 
 class TestHumanSessionMedia:
@@ -165,7 +177,7 @@ class TestHumanSessionMedia:
 
 class TestPrivacyNotice:
     def test_first_session_sends_privacy_notice(self, monkeypatch):
-        """首次会话先发隐私声明文本并标记，再继续正常处理当条消息"""
+        """首次会话：先发账号欢迎语（去重标记），再发隐私声明，然后正常处理当条消息"""
         sent = []
         accepted = []
         monkeypatch.setattr(
@@ -180,9 +192,30 @@ class TestPrivacyNotice:
 
         process_kf_messages("t1", KFID)
 
-        assert sent[0] == core.PRIVACY_NOTICE_TEXT
-        assert sent[1] == "AI回复"
+        assert sent[0] == "您好，欢迎来到 NIHPLOD 旎柏，很高兴为您服务。请问有什么可以帮到您？如需人工客服，请回复「转人工」。"
+        assert sent[1] == core.PRIVACY_NOTICE_TEXT
+        assert sent[2] == "AI回复"
         assert accepted == ["u-privacy"]
+        store.kv_delete(f"welcome-sent:{KFID}:u-privacy")
+
+    def test_welcome_not_resent_when_report_welcome_already_sent(self, monkeypatch):
+        """已通过测肤报告收到个性化欢迎语（welcome-sent 标记存在）：不再发通用欢迎语，只发隐私声明"""
+        sent = []
+        monkeypatch.setattr(
+            "src.core._do_send_kf",
+            lambda kfid, euid, content, msgid="": sent.append(content) or True,
+        )
+        monkeypatch.setattr("src.wecom.wxkf.get_session_state", lambda *a, **k: 1)
+        monkeypatch.setattr("src.core.store.privacy_notice_accepted", lambda k, u: False)
+        monkeypatch.setattr("src.core.store.privacy_notice_accept", lambda k, u: None)
+        monkeypatch.setattr("src.core.chat", lambda messages: "AI回复")
+        store.kv_set(f"welcome-sent:{KFID}:u-privacy-dup", "1", 600)
+        _patch_sync(monkeypatch, [_text_msg("m-privacy-2", euid="u-privacy-dup")])
+        try:
+            process_kf_messages("t1", KFID)
+            assert sent == [core.PRIVACY_NOTICE_TEXT, "AI回复"]
+        finally:
+            store.kv_delete(f"welcome-sent:{KFID}:u-privacy-dup")
 
 
 class TestProcessMessage:

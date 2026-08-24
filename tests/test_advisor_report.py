@@ -157,7 +157,9 @@ class TestBuildWelcomeText:
         text = advisor_report.build_welcome_text(FAKE_EXTENDED_REPORT)
         assert "年龄段：26-30岁" in text
         assert "关注问题：细纹/松弛、色斑/暗沉" in text
-        assert "医美经历（近3月）：光子/激光类" in text
+        # 医美经历属敏感个人信息：只显示「已记录」，不回显具体内容
+        assert "医美经历（近3月）：已记录" in text
+        assert "光子/激光类" not in text
         assert "护肤习惯：每天精细护肤" in text
 
     def test_welcome_text_without_nickname(self):
@@ -169,7 +171,7 @@ class TestBuildWelcomeText:
         text = advisor_report.build_welcome_text(
             {**FAKE_REPORT, "createdAt": "2026-08-01T02:00:00.000Z"}
         )
-        assert "最近一次的肌智派测肤时间: 2026年08月01日" in text
+        assert "最近一次的肌智派测肤时间：2026年08月01日" in text
 
     def test_welcome_text_created_at_fallback(self):
         # 旧版接口无 createdAt 时兜底为当天日期
@@ -553,7 +555,7 @@ class TestGenderAndNickname:
         text = advisor_report.build_welcome_text(
             {**FAKE_REPORT, "createdAt": "2026-08-01T10:00:00"}
         )
-        assert "最近一次的肌智派测肤时间: 2026年08月01日" in text
+        assert "最近一次的肌智派测肤时间：2026年08月01日" in text
 
 
 class TestKfLinkEndpoint:

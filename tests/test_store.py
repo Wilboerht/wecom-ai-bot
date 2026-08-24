@@ -11,6 +11,23 @@ def _uid() -> str:
     return "test_" + uuid.uuid4().hex[:8]
 
 
+class TestSessionTTL:
+    def test_custom_ttl_per_account(self):
+        """session_add 支持按账号覆盖 TTL（护肤顾问长周期陪伴场景延长会话记忆）"""
+        uid = _uid()
+        store.session_add(uid, "user", "x", ttl=10)
+        expire_at = store._inmem_session_ttl[uid]
+        assert time.time() < expire_at <= time.time() + 10
+
+    def test_default_ttl_fallback(self):
+        """ttl=0（未配置）时回退 config.SESSION_TTL"""
+        from src.config import config
+        uid = _uid()
+        store.session_add(uid, "user", "x")
+        expire_at = store._inmem_session_ttl[uid]
+        assert time.time() + config.SESSION_TTL - 5 < expire_at <= time.time() + config.SESSION_TTL
+
+
 class TestMsgidClaimRelease:
     def test_claim_first_time(self):
         mid = _uid()

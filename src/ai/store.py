@@ -88,8 +88,11 @@ def session_get(user_id: str) -> list[dict]:
     return [dict(m) for m in _inmem_sessions.get(user_id, [])]
 
 
-def session_add(user_id: str, role: str, content: str, max_msgs: int = 20) -> None:
-    """追加消息到会话。媒体类内容（图片/语音）应只传元信息，不传原始二进制"""
+def session_add(user_id: str, role: str, content: str, max_msgs: int = 20, ttl: int = 0) -> None:
+    """追加消息到会话。媒体类内容（图片/语音）应只传元信息，不传原始二进制。
+    ttl 为会话过期秒数（默认 0 = config.SESSION_TTL）；护肤顾问等长周期陪伴场景
+    可通过账号配置 session_ttl 延长，避免用户隔几小时回来 AI「断片」"""
+    ttl = ttl or config.SESSION_TTL
     # 安全校验：拒绝超长内容（可能是误传的 base64 图片数据）
     if len(content) > 4096:
         logger.warning("session_add rejected: content too long (%d chars) — possible media data leak", len(content))
@@ -101,25 +104,25 @@ def session_add(user_id: str, role: str, content: str, max_msgs: int = 20) -> No
             # LIST 原子追加：RPUSH + LTRIM 保留最近 max_msgs 条 + 刷新过期时间
             r.rpush(key, json.dumps({"role": role, "content": content}, ensure_ascii=False))
             r.ltrim(key, -max_msgs, -1)
-            r.expire(key, config.SESSION_TTL)
+            r.expire(key, ttl)
             return
         except Exception as e:
             _redis_down(e)
 
-    # 内存模式（单进程 GIL 下 list.append 原子，够用）
+    # 内存模式（单进程 GIL 下 list.append 原子，够用）；存过期时间戳，支持按账号差异化 TTL
     if user_id not in _inmem_sessions:
         _inmem_sessions[user_id] = []
     _inmem_sessions[user_id].append({"role": role, "content": content})
-    _inmem_session_ttl[user_id] = time.time()
+    _inmem_session_ttl[user_id] = time.time() + ttl
     if len(_inmem_sessions[user_id]) > max_msgs:
         _inmem_sessions[user_id] = _inmem_sessions[user_id][-max_msgs:]
 
 
 def _cleanup_sessions():
-    """清理过期内存会话"""
+    """清理过期内存会话（_inmem_session_ttl 存的是过期时间戳）"""
     now = time.time()
     for uid in list(_inmem_session_ttl.keys()):
-        if now - _inmem_session_ttl[uid] > config.SESSION_TTL:
+        if _inmem_session_ttl[uid] <= now:
             _inmem_sessions.pop(uid, None)
             _inmem_session_ttl.pop(uid, None)
 
@@ -519,27 +522,39 @@ def privacy_notice_accept(open_kfid: str, external_userid: str) -> None:
 #   orderflow:{kfid}:{euid}            订单查询流程状态 kv（600s）
 #   kf:transferred:{kfid}:{euid}       转人工跨批次标记 kv（300s）
 #   welcome-fallback:{kfid}:{euid}:*   欢迎语去重 kv（7 天，按报告 scene_param）
+#   review-due:{kfid}:{euid}:*         复评指令触达标记 kv（90 天，按随访日期）
+#   welcome-sent:{kfid}:{euid}         通用欢迎语已发标记 kv（365 天，与报告欢迎语去重共用）
 #   agent:{euid}                       用户→上次接待人绑定 STRING（30 天，不带 kfid）
 #   rl:{euid}                          限流时间戳 ZSET（约 120s，不带 kfid）
 # 明确不覆盖：kf:msgid:{msgid} 去重键按消息而非按用户存储，无法按用户枚举，1800s 自然过期。
 
 _WELCOME_FALLBACK_PREFIX = "welcome-fallback:"
+_REVIEW_DUE_PREFIX = "review-due:"
 
 
 def _user_kv_keys(open_kfid: str, external_userid: str) -> list[str]:
-    """该用户键控的 kv key 清单：固定两个 + welcome-fallback 前缀扫描"""
+    """该用户键控的 kv key 清单：固定两个 + welcome-fallback / review-due 前缀扫描"""
     fixed = [
         f"orderflow:{open_kfid}:{external_userid}",
         f"kf:transferred:{open_kfid}:{external_userid}",
+        f"welcome-sent:{open_kfid}:{external_userid}",
     ]
-    pattern_prefix = f"{_WELCOME_FALLBACK_PREFIX}{open_kfid}:{external_userid}:"
+    pattern_prefixes = [
+        f"{_WELCOME_FALLBACK_PREFIX}{open_kfid}:{external_userid}:",
+        f"{_REVIEW_DUE_PREFIX}{open_kfid}:{external_userid}:",
+    ]
     r = _get_redis()
     if r:
         try:
-            return fixed + list(r.scan_iter(match=f"{pattern_prefix}*", count=100))
+            scanned = []
+            for prefix in pattern_prefixes:
+                scanned.extend(r.scan_iter(match=f"{prefix}*", count=100))
+            return fixed + scanned
         except Exception as e:
             _redis_down(e)
-    return fixed + [k for k in _inmem_kv if k.startswith(pattern_prefix)]
+    return fixed + [
+        k for k in _inmem_kv if any(k.startswith(prefix) for prefix in pattern_prefixes)
+    ]
 
 
 def _ratelimit_export(external_userid: str) -> list[float] | None:

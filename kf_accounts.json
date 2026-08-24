@@ -128,7 +128,8 @@
       "转接"
     ],
     "system_prompt_file": "prompts/skincare_advisor.txt",
-    "order_flow": false
+    "order_flow": false,
+    "session_ttl": 172800
   },
   "kfc7834894b7ee2b86a": {
     "name": "护肤顾问",
@@ -148,6 +149,7 @@
       "转接"
     ],
     "system_prompt_file": "prompts/skincare_advisor.txt",
-    "order_flow": false
+    "order_flow": false,
+    "session_ttl": 172800
   }
 }

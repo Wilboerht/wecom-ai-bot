@@ -235,6 +235,7 @@ def build_welcome_text(report: dict) -> str:
     用户刚从测肤结果页点进来，欢迎语确认问卷收集到的基础信息；
     测肤时间优先用接口返回的 createdAt，旧版接口没有该字段时兜底为当天日期。
     问卷字段缺失时显示「暂未填写」，引导用户补充。
+    医美经历等敏感字段不回显具体内容，只显示「已记录」。
     """
     # nickname 清洗：去换行、截断 32 字符，防空/超长昵称撑爆企微 2048 字节上限
     nickname = re.sub(r"[\r\n]+", "", str(report.get("nickname") or "")).strip()[:32]
@@ -258,16 +259,18 @@ def build_welcome_text(report: dict) -> str:
     tested_at = _report_date(report)
 
     lines = [
-        f"尊敬的{name}您好, 我是你的专属顾问NIHPLOD肌智派护肤顾问, 很高兴成为您的专属护肤顾问, 为了将来给您带来更好的服务体验, 想和您确认以下的基础信息:",
+        f"尊敬的{name}您好，我是 NIHPLOD 肌智派专属护肤顾问，很高兴为您服务。"
+        "为了给您更贴合的护肤建议，想和您确认以下基础信息：",
         "",
         f"性别：{gender_label}",
         f"年龄段：{_q('ageRange')}",
         f"关注问题：{'、'.join(concerns) if concerns else '暂未填写'}",
-        f"医美经历（近3月）：{_q('medicalBeauty')}",
+        # 医美经历属敏感个人信息，聊天中不回显具体内容，只显示是否已记录
+        f"医美经历（近3月）：{'已记录' if q.get('medicalBeauty') else '暂未填写'}",
         f"护肤习惯：{_q('skincareFrequency')}",
-        f"最近一次的肌智派测肤时间: {tested_at.year}年{tested_at.month:02d}月{tested_at.day:02d}日",
+        f"最近一次的肌智派测肤时间：{tested_at.year}年{tested_at.month:02d}月{tested_at.day:02d}日",
         "",
-        "请确认上述信息，如果需要调整，请马上告诉我哦~",
+        "请确认上述信息，如需调整，直接告诉我就好哦~",
     ]
     return "\n".join(lines)
 
@@ -322,6 +325,9 @@ def _send_welcome(open_kfid: str, external_userid: str, scene_param: str, event:
             logger.warning("Welcome 补发失败: %s", e)
     if ok:
         logger.info("Welcome sent: user=%s session=%s", external_userid, _mask_session(scene_param))
+        # 与通用欢迎语（首条消息时发送，见 core.process_kf_messages）共用去重标记：
+        # 已收到报告个性化欢迎语的用户，不再收到账号通用欢迎语
+        store.kv_set(f"welcome-sent:{open_kfid}:{external_userid}", "1", 86400 * 365)
     else:
         # 全部失败：释放标记，允许下次事件重试
         store.kv_delete(key)

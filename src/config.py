@@ -35,8 +35,9 @@ class Config:
 
         self.DEEPSEEK_API_KEY = self._require("DEEPSEEK_API_KEY")
         self.DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
-        # 单次回复的最大 token 数，非法值回退默认 1000（不阻断启动）
-        self.DEEPSEEK_MAX_TOKENS = self._optional_int("DEEPSEEK_MAX_TOKENS", 1000)
+        # 单次回复的最大 token 数，非法值回退默认 2000（不阻断启动）；
+        # 护肤顾问完整方案（阶段声明+早晚流程+档案标签）较长，1000 有截断风险
+        self.DEEPSEEK_MAX_TOKENS = self._optional_int("DEEPSEEK_MAX_TOKENS", 2000)
         # 采样温度（0-2）：低值回复更确定、红线规则更稳；非法值回退默认、越界夹取边界（不阻断启动）
         self.DEEPSEEK_TEMPERATURE = self._optional_float("DEEPSEEK_TEMPERATURE", 0.3)
 
@@ -167,6 +168,14 @@ class Config:
                     raise ConfigError(
                         f"客服账号配置文件 {path} 中账号 {open_kfid} 的 {field} 必须是布尔值 true/false"
                     )
+            # 会话 TTL 覆盖（可选）：护肤顾问等长周期陪伴场景可延长，必须是正整数秒
+            session_ttl = account.get("session_ttl")
+            if session_ttl is not None and (
+                not isinstance(session_ttl, int) or isinstance(session_ttl, bool) or session_ttl <= 0
+            ):
+                raise ConfigError(
+                    f"客服账号配置文件 {path} 中账号 {open_kfid} 的 session_ttl 必须是正整数（秒）"
+                )
 
     def get_account(self, open_kfid: str) -> dict:
         """获取客服账号配置，未匹配时返回 _default"""

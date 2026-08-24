@@ -3,6 +3,7 @@ import threading
 import time
 from httpx import Client, HTTPStatusError, TimeoutException, TransportError
 from ..config import config
+from .. import metrics
 
 logger = logging.getLogger(__name__)
 
@@ -66,12 +67,17 @@ def chat(messages: list[dict], timeout: float = 28.0, max_retries: int = 2) -> s
             resp = _get_client().post(DEEPSEEK_API_URL, json=payload, headers=headers, timeout=timeout)
             resp.raise_for_status()
             data = resp.json()
+            choice = data["choices"][0]
             usage = data.get("usage") or {}
             logger.info(
                 "DeepSeek token 用量: prompt_tokens=%s completion_tokens=%s",
                 usage.get("prompt_tokens"), usage.get("completion_tokens"),
             )
-            return data["choices"][0]["message"]["content"]
+            if choice.get("finish_reason") == "length":
+                # 回复被 max_tokens 截断：内容已残缺（护肤方案可能少半截），计数并告警便于调整上限
+                metrics.inc(metrics.AI_TRUNCATED)
+                logger.warning("DeepSeek 回复被 max_tokens 截断: completion_tokens=%s", usage.get("completion_tokens"))
+            return choice["message"]["content"]
 
         except HTTPStatusError as e:
             status = e.response.status_code

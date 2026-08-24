@@ -165,7 +165,7 @@ class TestSessionManager:
     # store.py 无 reset 等价接口，原 test_reset 只是重复 add/get 假断言，已移除。
 
     def test_ttl_expiry(self):
-        """内存模式 TTL 过期：把会话最后活跃时间回拨到 SESSION_TTL 之前，
+        """内存模式 TTL 过期：把会话过期时间戳回拨到过去，
         session_get 触发惰性清理后应返回空"""
         import time
         import uuid

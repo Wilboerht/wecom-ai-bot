@@ -12,6 +12,8 @@
 | 订单查询流程状态 | `orderflow:{open_kfid}:{external_userid}` | STRING(JSON) | 600 秒 |
 | 转人工跨批次标记 | `kf:transferred:{open_kfid}:{external_userid}` | STRING | 300 秒 |
 | 欢迎语补发去重（按报告 scene_param） | `welcome-fallback:{open_kfid}:{external_userid}:*` | STRING | 7 天 |
+| 复评指令触达标记（按随访日期） | `review-due:{open_kfid}:{external_userid}:*` | STRING | 90 天 |
+| 通用欢迎语已发标记（与报告欢迎语去重共用） | `welcome-sent:{open_kfid}:{external_userid}` | STRING | 365 天 |
 | 用户→上次接待人绑定 | `agent:{external_userid}` | STRING | 30 天 |
 | 限流时间戳 | `rl:{external_userid}` | ZSET | 约 120 秒 |
 
@@ -48,8 +50,9 @@ Redis 模式（生产）：按 key pattern 用 `redis-cli` 删除，逐类执行
 KFID=wkXXX; EUID=wmXXX
 redis-cli DEL "sess:$KFID:$EUID" "profile:$KFID:$EUID" "privacy:$KFID:$EUID" \
   "orderflow:$KFID:$EUID" "kf:transferred:$KFID:$EUID" "agent:$EUID" "rl:$EUID"
-# welcome-fallback 带 scene_param 后缀，按模式扫描删除（勿用 KEYS 于大库，可换 SCAN）
+# welcome-fallback 带 scene_param 后缀、review-due 带随访日期后缀，按模式扫描删除（勿用 KEYS 于大库，可换 SCAN）
 redis-cli --scan --pattern "welcome-fallback:$KFID:$EUID:*" | xargs -r redis-cli DEL
+redis-cli --scan --pattern "review-due:$KFID:$EUID:*" | xargs -r redis-cli DEL
 ```
 
 内存模式（未配置 Redis 的单机部署）：数据在进程内存中，重启服务进程即全部清除：

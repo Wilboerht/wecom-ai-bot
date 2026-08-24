@@ -45,6 +45,35 @@ class TestSanitizeReply:
         text, hits = sanitize_reply("消炎杀菌，治疗敏感肌")
         assert "消炎" not in text and "杀菌" not in text and "治疗" not in text
 
+    def test_diyi_time_preserved(self):
+        """「第一时间」是惯常用法（尤其医疗红线「请第一时间就医」），不替换"""
+        text, hits = sanitize_reply("情况严重请第一时间就医")
+        assert "第一时间" in text
+        assert "第一" not in hits
+
+    def test_juedui_negation_preserved(self):
+        """「绝对不要/绝对不能」等告诫语气不替换，避免病句与语义削弱"""
+        text, hits = sanitize_reply("红肿痘痘绝对不要挤，也绝对不能熬夜")
+        assert "绝对不要" in text and "绝对不能" in text
+        assert "绝对" not in hits
+
+    def test_juedui_claim_replaced(self):
+        text, hits = sanitize_reply("这款产品绝对有效")
+        assert "绝对" not in text and "非常有效" in text
+
+    def test_zhiliao_medical_advice_preserved(self):
+        """医嘱语境（就医/医院/就诊/接受治疗）的「治疗」不替换"""
+        for text in ("建议及时就医治疗", "去医院治疗更稳妥", "建议就诊治疗", "接受治疗后观察"):
+            result, hits = sanitize_reply(text)
+            assert "治疗" in result, text
+            assert "治疗" not in hits, text
+
+    def test_zhiyu_objective_statement_preserved(self):
+        """「无法治愈」「难以治愈」是客观陈述，不替换"""
+        text, hits = sanitize_reply("医生说这种情况无法治愈，只能控制")
+        assert "无法治愈" in text
+        assert "治愈" not in hits
+
 
 class TestKfPipelineIntegration:
     """kf 链路：AI 回复发出前必须经过禁语清洗"""

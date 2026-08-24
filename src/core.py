@@ -9,7 +9,7 @@ import os
 import re
 import time
 import xml.etree.ElementTree as ET
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from .config import config
 from .compliance import sanitize_reply
@@ -132,7 +132,8 @@ _USER_MSG_CLOSE = "【客户消息结束】"
 
 
 def _today_line() -> str:
-    """今天日期（中国时区）：护肤顾问随访承诺（随访时间=今天+2周）依赖模型知道今天日期"""
+    """今天日期（中国时区）：方案正文的时间表述（如「两周后」）依赖模型知道今天日期；
+    随访时间/阶段开始字段本身由代码按阶段计算（见 _apply_stage_dates），不依赖模型手算"""
     now = datetime.now(ZoneInfo("Asia/Shanghai"))
     return f"今天是{now.year}年{now.month}月{now.day}日。"
 
@@ -518,8 +519,14 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             return
 
         if state in (0, 1):
-            # 隐私告知：首次会话先发送隐私声明并标记，继续咨询即视为同意
+            # 首次会话：先发账号欢迎语（welcome-sent 标记与测肤报告个性化欢迎语共用去重），
+            # 再发隐私声明并标记，继续咨询即视为同意
             if not store.privacy_notice_accepted(open_kfid, external_userid):
+                welcome = (account.get("welcome") or "").strip()
+                welcome_key = f"welcome-sent:{open_kfid}:{external_userid}"
+                if welcome and not store.kv_get(welcome_key):
+                    if _do_send_kf(open_kfid, external_userid, welcome):
+                        store.kv_set(welcome_key, "1", 86400 * 365)
                 _do_send_kf(open_kfid, external_userid, PRIVACY_NOTICE_TEXT)
                 store.privacy_notice_accept(open_kfid, external_userid)
 
@@ -545,7 +552,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             # 注入用户档案（key 白名单/截断防护 + 阶段状态块 + 复评日检测，见 build_profile_block；
             # 与 golden 测试用例共用同一函数保证行为一致）
             profile = store.profile_get(open_kfid, external_userid)
-            profile_text = build_profile_block(profile, external_userid)
+            profile_text = build_profile_block(profile, session_key)
 
             # 品牌客服知识库按需路由 + 注入防护（声明+定界符）
             messages = [{"role": "system", "content": build_system_content(open_kfid, user_text, history) + profile_text}]
@@ -555,11 +562,15 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             try:
                 reply = chat(messages)
             except AIServiceError:
-                # AI 失败：回滚认领允许重推后重试，同时转人工兜底；转接成功才打批次标记
+                # AI 失败：不主动转人工（客户没有提出该诉求），发一次繁忙提示并保留 msgid 认领——
+                # 企微重推因已认领而跳过，不会重复发提示；AI 恢复后客户再发一条即可正常咨询。
+                # 提示语发送失败才回滚认领，允许重推后重试
                 metrics.inc(metrics.AI_FAILURE)
-                store.msgid_release(msg_id)
-                if _handle_kf_transfer(open_kfid, external_userid, candidates):
-                    _transferred_in_batch.add(external_userid)
+                if not _do_send_kf(
+                    open_kfid, external_userid,
+                    "护肤顾问暂时繁忙，这条消息还没能回复您，请稍后再发一次。",
+                ):
+                    store.msgid_release(msg_id)
                 return
 
             # 广告法禁语后置兜底：命中替换为合规表述（在提取档案/写历史之前，
@@ -586,8 +597,14 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 store.msgid_release(msg_id)
                 return
             metrics.inc(metrics.AI_REPLY_OK)
-            store.session_add(session_key, "user", user_text)
-            store.session_add(session_key, "assistant", history_reply)
+            # 复评指令触达落库：仅在回复成功发出后标记（同一随访周期不再注入复评指令）；
+            # AI/发送失败不标记，企微重推后本周期复评仍会触发
+            if "今天是阶段复评日" in profile_text:
+                follow = str(profile.get("随访时间") or "").strip()
+                store.kv_set(f"{_REVIEW_DUE_PREFIX}{session_key}:{follow}", "1", _REVIEW_DUE_TTL)
+                logger.info("复评指令已触达: user=%s follow=%s", external_userid, follow)
+            store.session_add(session_key, "user", user_text, ttl=account.get("session_ttl", 0))
+            store.session_add(session_key, "assistant", history_reply, ttl=account.get("session_ttl", 0))
 
         # state 2/4 不做处理，等下次回调
 
@@ -874,10 +891,18 @@ _PROFILE_TAG_TAIL_RE = re.compile(r'[\[【]档案[:：][^\]】\n]*$', re.MULTILI
 
 
 # ---- 阶段目标管理 ----
-# 阶段字段由模型通过 [档案: ...] 标签写入，代码层只做结构性校验（日期必须真实 YYYY-MM-DD）；
+# 阶段字段由模型通过 [档案: ...] 标签写入，代码层做两道把关：日期格式校验（非法剔除）+
+# 随访时间/阶段开始按阶段自动重算（见 _apply_stage_dates，模型手算日期不可靠）；
 # 阶段名不做词表白名单（阶段名随客户诉求变化，写死会僵化）；晋级/留级/回退裁决归模型 prompt 规则。
 _STAGE_KEYS = ("当前阶段", "阶段目标", "阶段开始", "晋级条件")
 _STAGE_DATE_KEYS = ("阶段开始", "随访时间")
+
+# 复评触达标记 kv：key 含随访日期（review-due:{kfid}:{euid}:{随访时间}），
+# 每个随访周期只注入一次复评指令——客户「没执行/不想谈」时模型不写新随访时间，
+# 不去重会导致之后每条消息都被强制复评裁决，与 prompt「督促一次不再追问」冲突。
+# 标记在回复成功发出后才写入（见 _process_one），AI/发送失败不占用，下个周期仍可复评。
+_REVIEW_DUE_PREFIX = "review-due:"
+_REVIEW_DUE_TTL = 86400 * 90  # 与档案 TTL 一致
 
 
 def _valid_stage_date(value: str) -> bool:
@@ -898,6 +923,39 @@ def _validate_stage_fields(fields: dict) -> dict:
             metrics.inc(metrics.STAGE_FIELD_INVALID)
             fields.pop(key)
     return fields
+
+
+# 阶段 N → 复评间隔天数（与 prompt 三段式节奏一致：打底 2 周 / 进阶 4 周 / 巩固 90 天）
+_STAGE_REVIEW_DAYS = {1: 14, 2: 28, 3: 90}
+_STAGE_NO_RE = re.compile(r"阶段\s*(\d)\s*/\s*3")
+
+
+def _apply_stage_dates(open_kfid: str, external_userid: str, fields: dict) -> None:
+    """随访时间/阶段开始由代码按阶段计算（Asia/Shanghai），不信任模型手算日期。
+
+    仅当标签含「当前阶段=...（阶段N/3）」时触发：
+    - 随访时间 = 今天 + 阶段对应天数（覆盖模型写的值，模型不写也可以）；
+    - 阶段名变化（晋级/回退/新方案）时阶段开始 = 今天；留级（阶段名不变）保留原开始日期。
+    阶段名解析不出 N/3 时不干预，保留模型写的日期（已由 _validate_stage_fields 校验格式）。
+    """
+    stage = fields.get("当前阶段")
+    if not stage:
+        return
+    m = _STAGE_NO_RE.search(str(stage))
+    if not m:
+        logger.warning("阶段名缺少 阶段N/3 编号，日期按模型原值处理: user=%s stage=%r", external_userid, stage)
+        return
+    days = _STAGE_REVIEW_DAYS.get(int(m.group(1)))
+    if not days:
+        return
+    today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+    fields["随访时间"] = (today + timedelta(days=days)).isoformat()
+    existing = store.profile_get(open_kfid, external_userid)
+    if existing.get("当前阶段") == stage:
+        # 留级/阶段内调整：保留原阶段开始日期，不重置阶段时钟
+        fields.pop("阶段开始", None)
+    else:
+        fields["阶段开始"] = today.isoformat()
 
 
 def build_profile_block(profile: dict | None, user_id: str = "") -> str:
@@ -937,12 +995,16 @@ def build_profile_block(profile: dict | None, user_id: str = "") -> str:
 
     # 复评到期检测：代码算日期（Asia/Shanghai），随访时间不晚于今天则输出确定性指令，
     # 不依赖模型自行比较日期；日期非法视为未到期，不崩溃。
-    # 不要求阶段字段存在：老客档案只有上次方案+随访时间时，复评标记是老客迁移规则的触发入口
+    # 不要求阶段字段存在：老客档案只有上次方案+随访时间时，复评标记是老客迁移规则的触发入口。
+    # 每个随访周期只注入一次（review-due 触达标记，回复成功发出后由 _process_one 写入）；
+    # user_id 为空（golden/单测路径）时不去重，保证纯函数行为可测。
     follow = str(profile.get("随访时间") or "").strip()
     if _valid_stage_date(follow):
         due = datetime.strptime(follow, "%Y-%m-%d").date()
         today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
-        if due <= today:
+        if due <= today and (
+            not user_id or not store.kv_get(f"{_REVIEW_DUE_PREFIX}{user_id}:{follow}")
+        ):
             text += (
                 "\n【系统指令，优先级最高，覆盖寒暄规则】今天是阶段复评日："
                 "即使用户只是打招呼，也必须先执行阶段复评裁决（晋级/留级/回退），"
@@ -978,6 +1040,8 @@ def _save_profile_from_reply(open_kfid: str, external_userid: str, reply: str) -
     reply = _PROFILE_TAG_TAIL_RE.sub("", reply)
     # 阶段字段结构性校验（非法日期剔除），晋级/留级裁决本身归模型
     _validate_stage_fields(fields)
+    # 随访时间/阶段开始由代码按阶段重算（模型手算日期不可靠），仅在写了「当前阶段」时触发
+    _apply_stage_dates(open_kfid, external_userid, fields)
     if fields:
         store.profile_update(open_kfid, external_userid, fields)
         logger.info("Profile saved: user=%s fields=%s", external_userid, list(fields))
