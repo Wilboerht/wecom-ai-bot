@@ -874,8 +874,9 @@ def _strip_markdown(text: str) -> str:
     return text.strip()
 
 
-# 档案字段 key 白名单：仅中英文、数字、下划线，最长 20 字符（防注入伪造 system 指令）
-_PROFILE_KEY_RE = re.compile(r'^[\w一-龥]{1,20}$')
+# 档案字段 key 白名单：中英文、数字、下划线及全/半角括号（兼容报告字段「医美经历(近3月)」），
+# 最长 20 字符（防注入伪造 system 指令）
+_PROFILE_KEY_RE = re.compile(r'^[\w一-龥（）()]{1,20}$')
 # 完整闭合的档案标记（兼容全角【档案：…】）
 _PROFILE_TAG_RE = re.compile(r'[\[【]档案[:：]\s*([^\]】]+)[\]】]')
 # 行尾/文末残留的未闭合档案标记片段（如被 max_tokens 截断的 "[档案: 肤质=干性"）。

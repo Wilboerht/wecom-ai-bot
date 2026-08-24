@@ -99,6 +99,11 @@ class TestBuildProfileBlock:
         assert core.build_profile_block(None) == ""
         assert core.build_profile_block({}) == ""
 
+    def test_report_key_with_parentheses_injected(self):
+        """报告字段「医美经历(近3月)」带括号，应通过 key 白名单正常注入（安全相关信息不能丢）"""
+        text = core.build_profile_block({"肤质": "干性", "医美经历(近3月)": "光子激光"})
+        assert "医美经历(近3月): 光子激光" in text
+
     def test_basic_fields_without_stage(self):
         """无阶段字段：只有基础档案块，无状态块与复评标记"""
         text = core.build_profile_block({"肤质": "干性"})
