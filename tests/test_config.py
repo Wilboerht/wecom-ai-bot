@@ -23,6 +23,47 @@ def _import_config(extra_env: dict) -> subprocess.CompletedProcess:
     )
 
 
+def _read_config_value(extra_env: dict) -> subprocess.CompletedProcess:
+    """子进程读回配置值（用于非阻断型配置的取值验证）"""
+    env = {**os.environ, "PYTHONUTF8": "1", **extra_env}
+    return subprocess.run(
+        [sys.executable, "-c", "import src.config; print(src.config.config.DEEPSEEK_TEMPERATURE)"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    )
+
+
+class TestDeepSeekTemperature:
+    """采样温度 .env 可配：非法值回退默认、越界夹取边界，均不阻断启动"""
+
+    def test_default_is_03(self):
+        result = _read_config_value({})
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert float(result.stdout.strip()) == 0.3
+
+    def test_custom_value_accepted(self):
+        result = _read_config_value({"DEEPSEEK_TEMPERATURE": "0.8"})
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert float(result.stdout.strip()) == 0.8
+
+    def test_invalid_value_falls_back(self):
+        result = _read_config_value({"DEEPSEEK_TEMPERATURE": "abc"})
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert float(result.stdout.strip()) == 0.3
+
+    def test_above_range_clamped(self):
+        result = _read_config_value({"DEEPSEEK_TEMPERATURE": "5"})
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert float(result.stdout.strip()) == 2.0
+
+    def test_below_range_clamped(self):
+        result = _read_config_value({"DEEPSEEK_TEMPERATURE": "-1"})
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert float(result.stdout.strip()) == 0.0
+
+
 class TestServiceHoursValidation:
     """core.py 的时间窗判断为 start <= hour < end，不支持跨午夜，
     故 config 校验 0-23 范围且 START < END"""

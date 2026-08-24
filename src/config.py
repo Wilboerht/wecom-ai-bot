@@ -37,6 +37,8 @@ class Config:
         self.DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
         # 单次回复的最大 token 数，非法值回退默认 1000（不阻断启动）
         self.DEEPSEEK_MAX_TOKENS = self._optional_int("DEEPSEEK_MAX_TOKENS", 1000)
+        # 采样温度（0-2）：低值回复更确定、红线规则更稳；非法值回退默认、越界夹取边界（不阻断启动）
+        self.DEEPSEEK_TEMPERATURE = self._optional_float("DEEPSEEK_TEMPERATURE", 0.3)
 
         self.SYSTEM_PROMPT = os.getenv(
             "SYSTEM_PROMPT",
@@ -77,6 +79,18 @@ class Config:
             return int(os.getenv(key, str(default)))
         except ValueError:
             return default
+
+    def _optional_float(self, key: str, default: float) -> float:
+        """非关键浮点配置：非法值回退默认值；越界（采样温度有效区间 0-2）夹取到边界，不阻断启动"""
+        try:
+            value = float(os.getenv(key, str(default)))
+        except ValueError:
+            logger.warning("环境变量 %s 值无效 %r，回退默认 %s", key, os.getenv(key), default)
+            return default
+        if not (0.0 <= value <= 2.0):
+            logger.warning("环境变量 %s 值 %s 超出有效区间 0-2，已夹取到边界", key, value)
+            value = min(max(value, 0.0), 2.0)
+        return value
 
     def _validate_service_hours(self) -> None:
         # core.py is_within_service_hours() 用 start <= hour < end 判断，

@@ -51,7 +51,8 @@ def chat(messages: list[dict], timeout: float = 28.0, max_retries: int = 2) -> s
         "model": config.DEEPSEEK_MODEL,
         "messages": messages,
         "max_tokens": config.DEEPSEEK_MAX_TOKENS,
-        "temperature": 0.6,
+        # 采样温度 .env 可配（DEEPSEEK_TEMPERATURE，默认 0.3）：低值更确定，红线/合规场景更稳
+        "temperature": config.DEEPSEEK_TEMPERATURE,
     }
 
     backoffs = _RETRY_BACKOFF[:max(0, max_retries)]
