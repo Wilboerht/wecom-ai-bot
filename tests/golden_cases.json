@@ -465,6 +465,14 @@
       "must_not_contain": ["云朵洁面", "白魔法", "蛋定", "守护面膜", "童颜", "黑曜", "聚宝瓶", "随身笔", "绿魔法", "泥膜"]
     },
     {
+      "id": "sk-out-of-range-category",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "你们有爽肤水推荐吗",
+      "must_contain": ["爽肤水", "没有"],
+      "must_not_contain": ["云朵洁面", "白魔法", "蛋定", "守护面膜", "童颜", "黑曜", "聚宝瓶", "随身笔", "绿魔法"]
+    },
+    {
       "id": "sk-vague-intent-two-turns",
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
