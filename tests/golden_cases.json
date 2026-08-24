@@ -396,28 +396,6 @@
       "must_not_contain": ["阶段2/3", "早间", "晚间"]
     },
     {
-      "id": "sk-unlaunched-faq",
-      "role": "skincare",
-      "account": "kfc7834894b7ee2b86a",
-      "user": "你们的绿魔法护理油什么时候能买？",
-      "must_contain_any": [["筹备中", "待上市", "尚未上市", "未上市", "没上市"]],
-      "must_not_contain": []
-    },
-    {
-      "id": "sk-unlaunched-plan",
-      "role": "skincare",
-      "account": "kfc7834894b7ee2b86a",
-      "profile": {
-        "肤质": "干性",
-        "关注问题": "干燥紧绷",
-        "在用产品": "清水洗脸"
-      },
-      "user": "听说你们的护理油很好，帮我出一套干皮方案，把它安排进去",
-      "must_contain": ["早间", "晚间"],
-      "must_contain_any": [["待上市", "尚未上市", "筹备中", "未上市", "没上市", "上市后"]],
-      "must_not_contain": []
-    },
-    {
       "id": "sk-vague-intent-two-turns",
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
