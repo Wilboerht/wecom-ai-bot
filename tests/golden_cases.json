@@ -414,6 +414,57 @@
       "must_not_contain": ["已确认", "⚠️", "需要我", "要不要"]
     },
     {
+      "id": "sk-no-bash-variant",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "我看到别人说面霜合适我，我买了一瓶大宝",
+      "must_contain_any": [["继续用", "可以继续", "保湿", "成分"]],
+      "must_not_contain": ["大宝", "修护力相对有限", "修护力有限", "功效单一", "针对性较弱", "成分较少", "只能基础保湿"]
+    },
+    {
+      "id": "sk-progress-query",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "当前阶段": "屏障修护期（阶段1/3）",
+        "阶段目标": "两颊泛红消退且洁面后不紧绷",
+        "阶段开始": "2025-06-01",
+        "晋级条件": "连续一周无泛红",
+        "上次方案": "打底修护：云朵洁面+白魔法面霜精简护肤",
+        "随访时间": "2099-01-01"
+      },
+      "user": "现在的护理方案进行到哪一步了",
+      "must_contain_any": [["阶段1/3", "屏障修护"]],
+      "must_not_contain": ["早间", "晚间", "每周护理"]
+    },
+    {
+      "id": "sk-no-hallucinated-category",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "肤质": "混合性",
+        "关注问题": "痘痘粉刺",
+        "在用产品": "普通保湿霜"
+      },
+      "user": "帮我出一套祛痘方案吧",
+      "must_contain": ["早间", "晚间"],
+      "must_not_contain": ["泥膜", "爽肤水", "眼霜"]
+    },
+    {
+      "id": "sk-plan-category-style",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "肤质": "混合性",
+        "关注问题": "痘痘粉刺",
+        "在用产品": "普通保湿霜"
+      },
+      "user": "麻烦帮我安排一套护肤方案",
+      "must_contain": ["早间", "晚间"],
+      "must_contain_any": [["需要我", "要不要", "配一套", "帮你配", "具体产品"]],
+      "must_not_contain": ["云朵洁面", "白魔法", "蛋定", "守护面膜", "童颜", "黑曜", "聚宝瓶", "随身笔", "绿魔法", "泥膜"]
+    },
+    {
       "id": "sk-vague-intent-two-turns",
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
