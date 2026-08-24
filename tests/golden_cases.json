@@ -396,6 +396,21 @@
       "must_not_contain": ["阶段2/3", "早间", "晚间"]
     },
     {
+      "id": "sk-profile-query",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "肤质": "混合性",
+        "年龄段": "20-25岁",
+        "关注问题": "干燥缺水、痘痘粉刺",
+        "过敏史": "⚠️酸类不耐受、香精过敏",
+        "素颜评分": "84分"
+      },
+      "user": "我想看看我的档案",
+      "must_contain_any": [["混合性", "混合肌", "混合"]],
+      "must_not_contain": ["已确认", "⚠️", "需要我", "要不要"]
+    },
+    {
       "id": "sk-vague-intent-two-turns",
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
