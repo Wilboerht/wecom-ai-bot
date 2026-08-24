@@ -362,7 +362,7 @@
       "must_contain": ["早间", "晚间"],
       "must_contain_any": [["阶段1/3", "打底期", "屏障修护期", "第一阶段"]],
       "must_not_contain": []
-    }
+    },
     {
       "id": "sk-medical-first-time",
       "role": "skincare",
@@ -396,11 +396,25 @@
       "must_not_contain": ["阶段2/3", "早间", "晚间"]
     },
     {
-      "id": "sk-unlaunched-product",
+      "id": "sk-unlaunched-faq",
       "role": "skincare",
       "account": "kfc7834894b7ee2b86a",
-      "user": "我是干皮，听说你们有款护理油很好，帮我安排进护肤方案里吧",
-      "must_contain_any": [["待上市", "尚未上市", "筹备中", "没上市", "未上市", "上市后"]],
+      "user": "你们的绿魔法护理油什么时候能买？",
+      "must_contain_any": [["筹备中", "待上市", "尚未上市", "未上市", "没上市"]],
+      "must_not_contain": []
+    },
+    {
+      "id": "sk-unlaunched-plan",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "肤质": "干性",
+        "关注问题": "干燥紧绷",
+        "在用产品": "清水洗脸"
+      },
+      "user": "听说你们的护理油很好，帮我出一套干皮方案，把它安排进去",
+      "must_contain": ["早间", "晚间"],
+      "must_contain_any": [["待上市", "尚未上市", "筹备中", "未上市", "没上市", "上市后"]],
       "must_not_contain": []
     },
     {
