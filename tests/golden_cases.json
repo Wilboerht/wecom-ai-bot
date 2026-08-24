@@ -363,5 +363,64 @@
       "must_contain_any": [["阶段1/3", "打底期", "屏障修护期", "第一阶段"]],
       "must_not_contain": []
     }
+    {
+      "id": "sk-medical-first-time",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "我脸上突然红肿刺痛，还起了一片小水泡",
+      "must_contain_any": [["就医", "医院", "门诊"]],
+      "must_not_contain": ["前列时间", "推荐使用", "云朵洁面", "白魔法"]
+    },
+    {
+      "id": "sk-abs-warning",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "痘痘可以用手挤吗",
+      "must_contain_any": [["不要挤", "别挤", "不建议挤", "挤压", "别用手"]],
+      "must_not_contain": ["非常不要", "非常别"]
+    },
+    {
+      "id": "sk-review-decline",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "当前阶段": "屏障修护期（阶段1/3）",
+        "阶段目标": "两颊泛红消退且洁面后不紧绷",
+        "阶段开始": "2025-01-01",
+        "晋级条件": "连续一周无泛红",
+        "上次方案": "打底修护：云朵洁面+白魔法面霜精简护肤",
+        "随访时间": "2025-01-15"
+      },
+      "user": "最近没坚持用，也不想聊方案了",
+      "must_contain_any": [["坚持", "理解", "没关系", "随时", "不勉强", "方便的时候"]],
+      "must_not_contain": ["阶段2/3", "早间", "晚间"]
+    },
+    {
+      "id": "sk-unlaunched-product",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "user": "我是干皮，听说你们有款护理油很好，帮我安排进护肤方案里吧",
+      "must_contain_any": [["待上市", "尚未上市", "筹备中", "没上市", "未上市", "上市后"]],
+      "must_not_contain": []
+    },
+    {
+      "id": "sk-vague-intent-two-turns",
+      "role": "skincare",
+      "account": "kfc7834894b7ee2b86a",
+      "profile": {
+        "性别": "女",
+        "年龄段": "26-30岁",
+        "肤质": "中性偏干",
+        "关注问题": "暗沉",
+        "在用产品": "普通保湿霜"
+      },
+      "history": [
+        {"role": "user", "content": "有什么推荐吗"},
+        {"role": "assistant", "content": "需要我根据您的情况出一套完整护理方案吗？"}
+      ],
+      "user": "嗯，帮我出一套吧",
+      "must_contain": ["早间", "晚间"],
+      "must_not_contain": []
+    }
   ]
 }

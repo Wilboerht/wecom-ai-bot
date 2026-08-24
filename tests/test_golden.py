@@ -27,11 +27,16 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.mark.parametrize("case", _CASES, ids=[c["id"] for c in _CASES])
 def test_golden_case(case):
-    system_content = build_system_content(case["account"], case["user"], [])
+    # 可选多轮历史：模拟真实多轮对话（如模糊意图先征询、下一轮确认后出方案）
+    history = [
+        {"role": m["role"], "content": m["content"]} for m in case.get("history") or []
+    ]
+    system_content = build_system_content(case["account"], case["user"], history)
     # 可选档案预置：与生产链路同一函数（含阶段状态块与复评日检测，保证行为一致）
     system_content += build_profile_block(case.get("profile"))
     messages = [
         {"role": "system", "content": system_content},
+        *history,
         {"role": "user", "content": wrap_user_text(case["user"])},
     ]
     reply, _ = sanitize_reply(chat(messages))

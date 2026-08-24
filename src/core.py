@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from .config import config
 from .compliance import sanitize_reply
+from . import copy
 from . import metrics
 from .wecom.crypto import WXBizMsgCrypt, SignatureError, DecryptError
 from .wecom.handler import (
@@ -196,7 +197,7 @@ def process_message(message) -> str | None:
             claim_key = f"wx:event:{message.from_user}:{event}:{message.create_time}"
             if not store.msgid_claim(claim_key):
                 return None
-            return "您好，欢迎来到 NIHPLOD 旎柏，很高兴为您服务。请问有什么可以帮到您？如需人工客服，请回复「转人工」。"
+            return copy.WX_WELCOME_TEXT
         return None
 
     if isinstance(message, TextMessage):
@@ -231,7 +232,7 @@ def process_message(message) -> str | None:
                 logger.warning("公众号 AI 超出 %.1fs 预算返回兜底: user=%s", _WX_AI_TIMEOUT, user_id)
             if claim_key:
                 store.msgid_release(claim_key)
-            return "AI服务暂时不可用，请稍后再试。"
+            return copy.WX_AI_UNAVAILABLE
 
         # 广告法禁语后置兜底：命中替换为合规表述
         reply, banned_hits = sanitize_reply(reply)
@@ -245,7 +246,7 @@ def process_message(message) -> str | None:
         store.session_add(user_id, "assistant", reply)
         return reply
 
-    return "暂不支持图片/语音，请用文字描述您的问题。"
+    return copy.WX_MEDIA_UNSUPPORTED
 
 
 # ---- 统一回调处理 ----
@@ -316,12 +317,9 @@ def handle_callback(body: str, query: dict, crypto: WXBizMsgCrypt) -> dict:
 
 
 # ---- 微信客服消息处理 ----
-# 隐私声明：首次会话先发送，继续咨询即视为同意
-PRIVACY_NOTICE_TEXT = (
-    "【隐私告知】为向您提供护肤咨询服务，我们会收集您的咨询内容及肤质相关信息"
-    "（其中可能包含过敏史、孕期状态等敏感个人信息），并会将咨询内容发送给第三方 AI 服务（DeepSeek）进行处理。"
-    "继续咨询即视为您同意上述处理；如需人工客服，请回复「人工」。"
-)
+# 用户可见固定文案集中在 src/copy.py（文案术语表见 docs/copy-style-guide.md）；
+# 别名保持 core.PRIVACY_NOTICE_TEXT 可引用（测试与既有调用方）
+PRIVACY_NOTICE_TEXT = copy.PRIVACY_NOTICE_TEXT
 
 
 def process_kf_messages(token: str, open_kfid: str) -> None:
@@ -380,7 +378,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             # 流程内退出关键词：命中即删除流程状态并确认
             if any(w in user_text for w in ORDER_FLOW_EXIT_WORDS):
                 store.kv_delete(key)
-                _do_send_kf(open_kfid, euid, "好的，已取消订单查询。如需人工客服，请回复「转人工」。")
+                _do_send_kf(open_kfid, euid, copy.ORDER_FLOW_CANCELLED)
                 return True
             try:
                 d = json.loads(info)
@@ -393,11 +391,11 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                     attempts = int(d.get("attempts", 0)) + 1
                     if attempts >= ORDER_FLOW_MAX_ATTEMPTS:
                         store.kv_delete(key)
-                        _do_send_kf(open_kfid, euid, "还是没有识别到订单号，已先为您退出订单查询，稍后可回复「查订单」重新开始。")
+                        _do_send_kf(open_kfid, euid, copy.ORDER_FLOW_GIVE_UP)
                         return True
                     d["attempts"] = attempts
                     store.kv_set(key, json.dumps(d, ensure_ascii=False), ORDER_FLOW_TTL)
-                    _do_send_kf(open_kfid, euid, "这个看起来不像是订单号，麻烦再发一下订单号哦。")
+                    _do_send_kf(open_kfid, euid, copy.ORDER_FLOW_INVALID_ORDER_NO)
                     return True
                 # 转接成功才删除流程上下文；全员失败/非服务时间时保留，稍后可重试
                 if _handle_kf_transfer(
@@ -421,18 +419,18 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 return True
             # 渠道输入长度校验：超长输入不采信，按无效输入处理
             if len(user_text) > ORDER_FLOW_CHANNEL_MAX_LEN:
-                _do_send_kf(open_kfid, euid, "没看懂您说的购买渠道，麻烦直接回复平台名称，如「小红书」「天猫国际」「抖音商城」。")
+                _do_send_kf(open_kfid, euid, copy.ORDER_FLOW_INVALID_CHANNEL)
                 return True
             d["channel"] = channel
             d["step"] = "orderno"
             store.kv_set(key, json.dumps(d, ensure_ascii=False), ORDER_FLOW_TTL)
-            _do_send_kf(open_kfid, euid, "好的，请问您的订单号是多少呢？")
+            _do_send_kf(open_kfid, euid, copy.ORDER_FLOW_ASK_ORDER_NO)
             return True
 
         if _order_triggered(user_text):
             metrics.inc(metrics.ORDERFLOW_STARTED)
             store.kv_set(key, json.dumps({"step": "channel"}, ensure_ascii=False), ORDER_FLOW_TTL)
-            _do_send_kf(open_kfid, euid, "好的，帮您查询订单。请问您是在哪个平台购买的？（小红书、天猫国际、抖音商城、其它）")
+            _do_send_kf(open_kfid, euid, copy.ORDER_FLOW_ASK_CHANNEL)
             return True
         return False
 
@@ -482,7 +480,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             # 安全层：永不上报图片/语音到 Redis 或日志，只记类型
             logger.info("KF media received: type=%s user=%s (content NOT stored)", msgtype, external_userid)
             if state != 3 and not transferred and (not send_time or time.time() - send_time < 120):
-                if not _do_send_kf(open_kfid, external_userid, "暂不支持图片/语音，请用文字描述您的问题。如需人工顾问，请回复「转人工」。"):
+                if not _do_send_kf(open_kfid, external_userid, copy.KF_MEDIA_UNSUPPORTED):
                     store.msgid_release(msg_id)
             return
 
@@ -514,7 +512,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
         if not transfer_hit and check_rate_limit(external_userid, send_time):
             metrics.inc(metrics.RATELIMIT_HIT)
-            if not _do_send_kf(open_kfid, external_userid, "您的消息发送过于频繁，请稍后再试。"):
+            if not _do_send_kf(open_kfid, external_userid, copy.RATELIMIT_HINT):
                 store.msgid_release(msg_id)
             return
 
@@ -566,10 +564,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 # 企微重推因已认领而跳过，不会重复发提示；AI 恢复后客户再发一条即可正常咨询。
                 # 提示语发送失败才回滚认领，允许重推后重试
                 metrics.inc(metrics.AI_FAILURE)
-                if not _do_send_kf(
-                    open_kfid, external_userid,
-                    "护肤顾问暂时繁忙，这条消息还没能回复您，请稍后再发一次。",
-                ):
+                if not _do_send_kf(open_kfid, external_userid, copy.KF_AI_BUSY):
                     store.msgid_release(msg_id)
                 return
 
@@ -602,6 +597,7 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
             if "今天是阶段复评日" in profile_text:
                 follow = str(profile.get("随访时间") or "").strip()
                 store.kv_set(f"{_REVIEW_DUE_PREFIX}{session_key}:{follow}", "1", _REVIEW_DUE_TTL)
+                metrics.inc(metrics.REVIEW_TRIGGERED)
                 logger.info("复评指令已触达: user=%s follow=%s", external_userid, follow)
             store.session_add(session_key, "user", user_text, ttl=account.get("session_ttl", 0))
             store.session_add(session_key, "assistant", history_reply, ttl=account.get("session_ttl", 0))
@@ -709,15 +705,12 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
     调用方可据此决定是否保留订单流程等上下文"""
     if not is_within_service_hours():
         metrics.inc(metrics.TRANSFER_FAILED)
-        _do_send_kf(
-            open_kfid, external_userid,
-            "您反馈的问题需要人工客服跟进处理，人工客服服务时间为周一至周五 10:00-20:00。建议您在该时间段内再来联系我们，客服会第一时间为您处理。",
-        )
+        _do_send_kf(open_kfid, external_userid, copy.TRANSFER_OFF_HOURS)
         return False
 
     if not candidates:
         metrics.inc(metrics.TRANSFER_FAILED)
-        _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
+        _do_send_kf(open_kfid, external_userid, copy.TRANSFER_UNAVAILABLE)
         return False
 
     from .wecom.wxkf import transfer_session, send_agent_notice
@@ -751,7 +744,7 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
 
     if not chosen:
         metrics.inc(metrics.TRANSFER_FAILED)
-        _do_send_kf(open_kfid, external_userid, "人工客服暂时不可用，请稍后再试。")
+        _do_send_kf(open_kfid, external_userid, copy.TRANSFER_UNAVAILABLE)
         return False
 
     metrics.inc(metrics.TRANSFER_SUCCESS)
@@ -759,7 +752,7 @@ def _handle_kf_transfer(open_kfid: str, external_userid: str, candidates: list, 
     # 跨批次标记: state=3 生效有延迟, TTL 内命中则机器人不再回复（消息处理开头检查）
     store.kv_set(f"kf:transferred:{open_kfid}:{external_userid}", "1", TRANSFERRED_MARK_TTL)
     # 客户侧只看到转接提示；问题上下文通过企业微信应用消息单独发给客服
-    _do_send_kf(open_kfid, external_userid, "正在为您转接人工顾问，请稍候...")
+    _do_send_kf(open_kfid, external_userid, copy.TRANSFER_IN_PROGRESS)
     if user_text:
         try:
             send_agent_notice(
@@ -951,6 +944,17 @@ def _apply_stage_dates(open_kfid: str, external_userid: str, fields: dict) -> No
     today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
     fields["随访时间"] = (today + timedelta(days=days)).isoformat()
     existing = store.profile_get(open_kfid, external_userid)
+    # 阶段流转计数：晋级/留级/回退可观测（老阶段名解析不出 N 时按首次进入计）
+    new_no = int(m.group(1))
+    old_m = _STAGE_NO_RE.search(str(existing.get("当前阶段") or ""))
+    if not old_m:
+        metrics.inc(metrics.STAGE_STARTED)
+    elif new_no > int(old_m.group(1)):
+        metrics.inc(metrics.STAGE_PROMOTED)
+    elif new_no < int(old_m.group(1)):
+        metrics.inc(metrics.STAGE_REGRESSED)
+    else:
+        metrics.inc(metrics.STAGE_HELD)
     if existing.get("当前阶段") == stage:
         # 留级/阶段内调整：保留原阶段开始日期，不重置阶段时钟
         fields.pop("阶段开始", None)
