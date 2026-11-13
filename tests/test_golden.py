@@ -31,9 +31,11 @@ def test_golden_case(case):
     history = [
         {"role": m["role"], "content": m["content"]} for m in case.get("history") or []
     ]
-    system_content = build_system_content(case["account"], case["user"], history)
-    # 可选档案预置：与生产链路同一函数（含阶段状态块与复评日检测，保证行为一致）
-    system_content += build_profile_block(case.get("profile"))
+    # 可选档案预置：与生产链路同一函数/同一顺序（档案在注入防护声明之前）
+    profile_text = build_profile_block(case.get("profile"))
+    system_content = build_system_content(
+        case["account"], case["user"], history, profile_text=profile_text
+    )
     messages = [
         {"role": "system", "content": system_content},
         *history,

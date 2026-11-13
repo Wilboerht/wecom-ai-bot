@@ -1,7 +1,6 @@
 """微信客服消息处理 — enter_session 事件分支测试"""
 
 import time
-from unittest.mock import patch
 
 from src.core import process_kf_messages
 

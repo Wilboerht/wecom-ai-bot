@@ -151,6 +151,16 @@ class TestSyncMessages:
         with pytest.raises(WecomApiError):
             wxkf.sync_messages(CORPID, SECRET, token="t", open_kfid="kf1")
 
+    def test_non_json_response_raises_wecom_error(self, monkeypatch):
+        """网关返回 HTML/非 JSON 时统一包装为 WecomApiError，而不是裸 ValueError。"""
+        client = FakeClient(
+            get_resps=[TOKEN_OK],
+            post_resps=["<html>bad gateway</html>"] * 3,
+        )
+        monkeypatch.setattr(wxkf, "_client", client)
+        with pytest.raises(WecomApiError):
+            wxkf.sync_messages(CORPID, SECRET, token="t", open_kfid="kf1")
+
     def test_network_error_exhausted_raises(self, monkeypatch):
         """网络异常重试耗尽后抛 WecomApiError（不再静默返回空）"""
         err = httpx.ReadTimeout("timeout")

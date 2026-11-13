@@ -166,6 +166,31 @@ class TestBuildWelcomeText:
         text = advisor_report.build_welcome_text({"found": True, "gender": "male"})
         assert "尊敬的先生您好" in text
 
+    def test_medical_beauty_none_is_not_recorded(self):
+        text = advisor_report.build_welcome_text({
+            "found": True,
+            "questionnaire": {"medicalBeauty": "无"},
+        })
+        assert "医美经历（近3月）：暂未填写" in text
+        assert "医美经历（近3月）：已记录" not in text
+
+    def test_malformed_issue_list_does_not_crash(self):
+        fields = advisor_report.build_profile_fields({
+            "found": True,
+            "issues": ["bad", {"label": "光泽度", "score": 50}],
+            "dimensions": ["bad", {"label": "水油平衡", "score": 60}],
+            "concerns": "色斑暗沉",
+        })
+        assert fields["重点问题"] == "光泽度（50分）"
+        assert fields["各维度评分"] == "水油平衡60分"
+
+    def test_concerns_string_not_iterated_by_char(self):
+        fields = advisor_report.build_profile_fields({
+            "found": True,
+            "concerns": "色斑暗沉",
+        })
+        assert fields["重点问题"] == "色斑暗沉"
+
     def test_welcome_text_uses_report_created_at(self):
         # 接口返回 createdAt 时按它显示测肤日期（UTC 转中国时区）
         text = advisor_report.build_welcome_text(
@@ -599,3 +624,22 @@ class TestKfLinkEndpoint:
         assert data["url"] == (
             "https://work.weixin.qq.com/kf/kfc78?enc_scene=ENC123&scene_param=sess-1234567890"
         )
+
+    @pytest.mark.asyncio
+    async def test_accepts_session_id_header(self, client, monkeypatch):
+        monkeypatch.setattr(config, "INTERNAL_API_KEY", "secret-key-123")
+        monkeypatch.setattr(config, "KF_ADVISOR_OPEN_KFID", "kfc7834894b7ee2b86a")
+        monkeypatch.setattr(config, "KF_SCENE", "advisor")
+        monkeypatch.setattr(
+            "src.main._get_advisor_link",
+            lambda open_kfid, scene: "https://work.weixin.qq.com/kf/kfc78?enc_scene=ENC123",
+        )
+        resp = await client.get(
+            "/api/kf-link",
+            headers={
+                "x-internal-key": "secret-key-123",
+                "x-session-id": "sess-1234567890",
+            },
+        )
+        assert resp.status_code == 200
+        assert "scene_param=sess-1234567890" in resp.json()["url"]

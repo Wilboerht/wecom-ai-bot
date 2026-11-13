@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import math
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -37,7 +38,7 @@ class Config:
         self.DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
         # 单次回复的最大 token 数，非法值回退默认 2000（不阻断启动）；
         # 护肤顾问完整方案（阶段声明+早晚流程+档案标签）较长，1000 有截断风险
-        self.DEEPSEEK_MAX_TOKENS = self._optional_int("DEEPSEEK_MAX_TOKENS", 2000)
+        self.DEEPSEEK_MAX_TOKENS = max(1, self._optional_int("DEEPSEEK_MAX_TOKENS", 2000))
         # 采样温度（0-2）：低值回复更确定、红线规则更稳；非法值回退默认、越界夹取边界（不阻断启动）
         self.DEEPSEEK_TEMPERATURE = self._optional_float("DEEPSEEK_TEMPERATURE", 0.3)
 
@@ -47,6 +48,12 @@ class Config:
         )
 
         self.SESSION_TTL = self._require_int("SESSION_TTL", 1800)
+        if self.SESSION_TTL <= 0:
+            raise ConfigError(f"SESSION_TTL 必须是正整数（秒），当前: {self.SESSION_TTL}")
+
+        # 非微信客服（公众号/企微应用普通消息）的 AI 自动回复开关。
+        # 这两条路径没有隐私声明、限流和被动回复长度保护，默认关闭。
+        self.NON_KF_AUTO_REPLY_ENABLED = os.getenv("NON_KF_AUTO_REPLY_ENABLED", "0") == "1"
         self.LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
         self.REDIS_URL = os.getenv("REDIS_URL", "")
         # 业务指标定期日志间隔（秒），0 关闭；非法值回退默认不阻断
@@ -88,6 +95,9 @@ class Config:
         except ValueError:
             logger.warning("环境变量 %s 值无效 %r，回退默认 %s", key, os.getenv(key), default)
             return default
+        if math.isnan(value):
+            logger.warning("环境变量 %s 值为 NaN，回退默认 %s", key, default)
+            return default
         if not (0.0 <= value <= 2.0):
             logger.warning("环境变量 %s 值 %s 超出有效区间 0-2，已夹取到边界", key, value)
             value = min(max(value, 0.0), 2.0)
@@ -109,8 +119,17 @@ class Config:
             )
 
     def _load_accounts(self) -> None:
-        path = os.getenv("KF_ACCOUNTS_FILE", "kf_accounts.json")
+        configured_path = os.getenv("KF_ACCOUNTS_FILE", "")
+        path = configured_path or "kf_accounts.json"
         if not os.path.exists(path):
+            if configured_path:
+                raise ConfigError(f"客服账号配置文件 KF_ACCOUNTS_FILE 不存在: {path}")
+            # 默认文件缺失时允许单账号降级，但必须显式告警，避免部署漏拷后静默使用通用提示词
+            logger.warning(
+                "客服账号配置文件未找到: %s，将使用 _default/通用提示词；"
+                "多账号部署请检查 KF_ACCOUNTS_FILE",
+                path,
+            )
             return
         try:
             with open(path, "r", encoding="utf-8") as f:
@@ -143,13 +162,32 @@ class Config:
                     "system_prompt 或 system_prompt_file"
                 )
             prompt_file = account.get("system_prompt_file")
+            if prompt_file and not isinstance(prompt_file, str):
+                raise ConfigError(
+                    f"客服账号配置文件 {path} 中账号 {open_kfid} 的 system_prompt_file 必须是字符串"
+                )
             if prompt_file and not os.path.exists(prompt_file):
-                # 不阻断：运行期会回退内联/默认提示词并记警告
+                if not account.get("system_prompt"):
+                    # 没有内联兜底时阻断：提示词缺失会让品牌/护肤顾问退化成通用客服
+                    raise ConfigError(
+                        f"客服账号配置文件 {path} 中账号 {open_kfid} 的 "
+                        f"system_prompt_file 不存在且没有内联 system_prompt: {prompt_file}"
+                    )
+                # 有内联兜底时才允许继续
                 logger.warning(
-                    "%s 中账号 %s 的 system_prompt_file 不存在: %s",
+                    "%s 中账号 %s 的 system_prompt_file 不存在: %s（回退内联 system_prompt）",
                     path, open_kfid, prompt_file,
                 )
+            welcome = account.get("welcome")
+            if not isinstance(welcome, str):
+                raise ConfigError(
+                    f"客服账号配置文件 {path} 中账号 {open_kfid} 的 welcome 必须是字符串"
+                )
             knowledge_file = account["knowledge_file"]
+            if not isinstance(knowledge_file, str):
+                raise ConfigError(
+                    f"客服账号配置文件 {path} 中账号 {open_kfid} 的 knowledge_file 必须是字符串"
+                )
             if not os.path.exists(knowledge_file):
                 # 阻断：知识库是回复质量的地基，运行期静默降级成空知识库比启动失败更危险
                 raise ConfigError(
@@ -161,6 +199,11 @@ class Config:
                 if value is not None and not isinstance(value, (list, str)):
                     raise ConfigError(
                         f"客服账号配置文件 {path} 中账号 {open_kfid} 的 {field} 必须是字符串或字符串数组"
+                    )
+                if isinstance(value, list) and any(not isinstance(item, str) for item in value):
+                    raise ConfigError(
+                        f"客服账号配置文件 {path} 中账号 {open_kfid} 的 {field} "
+                        "数组元素必须全部是字符串"
                     )
             for field in ("order_flow", "knowledge_split", "advisor_report"):
                 value = account.get(field)

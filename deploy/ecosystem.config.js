@@ -2,8 +2,11 @@ module.exports = {
     apps: [{
         name: 'wecom-ai',
         script: 'venv/bin/python3',
-        args: '-m uvicorn src.main:app --host 127.0.0.1 --port 8080',
+        // 访问日志由 Nginx 统一记录（已配置脱敏格式）；关闭 uvicorn access log，
+        // 避免 /api/ 查询参数中的 external_userid/session_id 进入应用 stdout。
+        args: '-m uvicorn src.main:app --host 127.0.0.1 --port 8080 --no-access-log',
         cwd: '/var/www/wecom-ai-bot',
+        // 当前队列 consumer、用户锁、短链缓存和指标都是进程内状态；多实例需先改分布式实现
         instances: 1,
         exec_mode: 'fork',
         log_file: './logs/combined.log',

@@ -15,41 +15,50 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASE = "https://kf.nihplod.cn/l/{}"
 
 _links: dict[str, str] = {}
-_links_path = ""      # 最近一次 load_links 使用的路径，供热加载比对
-_links_mtime = -1.0   # 最近一次成功加载时的文件 mtime
+_links_path = ""             # 最近一次 load_links 使用的路径，供热加载比对
+_links_fingerprint = None    # (mtime, size)；双指纹防止同秒写入读到半截文件
 
 
 def load_links(path: str = "links.json") -> dict[str, str]:
     """加载 code → 长链接 映射；加载失败保留上一份成功加载的缓存"""
-    global _links, _links_path, _links_mtime
+    global _links, _links_path, _links_fingerprint
     _links_path = path
     if not os.path.exists(path):
         logger.error("链接配置不存在: %s（沿用现有缓存 %d 条）", path, len(_links))
         return _links
-    mtime = os.path.getmtime(path)
-    if mtime == _links_mtime:
-        return _links  # mtime 未变，沿用缓存
     try:
+        st = os.stat(path)
+        fingerprint = (st.st_mtime, st.st_size)
+        if fingerprint == _links_fingerprint:
+            return _links  # 文件未变，沿用缓存
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         # 合法 JSON 但顶层不是对象（如 []）时按加载失败处理，
         # 否则 _links 被污染后 shorten_text 的 .items() 会反复抛 AttributeError
         if not isinstance(data, dict):
             raise ValueError("links.json 顶层必须是对象 (code → 长链接)")
-        _links = data
-        _links_mtime = mtime
+        valid = {}
+        for code, url in data.items():
+            if isinstance(code, str) and isinstance(url, str) and url.startswith(("http://", "https://")):
+                valid[code] = url
+            else:
+                logger.warning("links.json 条目非法已忽略: code=%r", code)
+        _links = valid
+        _links_fingerprint = fingerprint
     except Exception as e:
         logger.error("links.json 加载失败: %s（沿用现有缓存 %d 条）", e, len(_links))
     return _links
 
 
 def _reload_if_changed() -> None:
-    """读取前比对 mtime，links.json 变更则热加载"""
-    if (
-        _links_path
-        and os.path.exists(_links_path)
-        and os.path.getmtime(_links_path) != _links_mtime
-    ):
+    """读取前比对 mtime/size，links.json 变更则热加载"""
+    if not _links_path or not os.path.exists(_links_path):
+        return
+    try:
+        st = os.stat(_links_path)
+    except OSError:
+        return
+    if (st.st_mtime, st.st_size) != _links_fingerprint:
         load_links(_links_path)
 
 

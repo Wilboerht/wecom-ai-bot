@@ -24,7 +24,7 @@ def _reset_links_state(monkeypatch):
     """每个用例前重置模块缓存，避免热加载状态在用例间泄漏"""
     monkeypatch.setattr("src.links._links", {})
     monkeypatch.setattr("src.links._links_path", "")
-    monkeypatch.setattr("src.links._links_mtime", -1.0)
+    monkeypatch.setattr("src.links._links_fingerprint", None)
 
 
 def _write(path, data):
@@ -86,6 +86,15 @@ class TestLoadLinks:
         os.utime(f, (3000, 3000))
         assert load_links(str(f)) == {"b": "https://example.com/b"}
 
+    def test_invalid_url_scheme_ignored(self, tmp_path, caplog):
+        """非 http/https 目标不进入短链映射，避免开放重定向到 javascript:。"""
+        f = tmp_path / "links.json"
+        _write(f, {"bad": "javascript:alert(1)", "good": "https://example.com/a"})
+        with caplog.at_level(logging.WARNING, logger="src.links"):
+            result = load_links(str(f))
+        assert result == {"good": "https://example.com/a"}
+        assert any("条目非法" in r.message for r in caplog.records)
+
     def test_get_target_triggers_hot_reload(self, tmp_path):
         """读取路径上自动热加载：改文件后 get_target 立即生效"""
         f = tmp_path / "links.json"
@@ -118,6 +127,15 @@ class TestShortenText:
     def test_shorten_keeps_unknown_urls(self, monkeypatch):
         monkeypatch.setattr("src.links._links", FAKE_LINKS)
         text = "随便一个 https://example.com/page 不换"
+        assert shorten_text(text) == text
+
+    def test_oil_placeholder_does_not_replace_official_homepage(self, monkeypatch):
+        """占位链接带独立 query，不能把普通官网链接误替换成护理油短链。"""
+        monkeypatch.setattr(
+            "src.links._links",
+            {"oil-dy": "https://nihplod.cn/?from=oil-dy"},
+        )
+        text = "官网 https://nihplod.cn 看看"
         assert shorten_text(text) == text
 
     def test_shorten_empty_text(self, monkeypatch):

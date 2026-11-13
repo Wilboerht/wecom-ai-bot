@@ -4,7 +4,6 @@ import pytest
 from src.wecom.crypto import (
     WXBizMsgCrypt,
     SignatureError,
-    DecryptError,
     pkcs7_pad,
     pkcs7_unpad,
 )

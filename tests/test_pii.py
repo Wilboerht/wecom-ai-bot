@@ -86,10 +86,25 @@ class TestParamValidation:
     @pytest.mark.asyncio
     async def test_missing_params(self, client, internal_key):
         resp = await client.get("/api/pii/export", headers={"x-internal-key": KEY})
-        assert resp.status_code == 422
+        assert resp.status_code == 400
 
 
 class TestExport:
+    @pytest.mark.asyncio
+    async def test_export_with_headers(self, client, internal_key, seeded_user):
+        """敏感标识优先走请求头，避免进入 URL/访问日志。"""
+        resp = await client.get(
+            "/api/pii/export",
+            headers={
+                "x-internal-key": KEY,
+                "x-open-kfid": KFID,
+                "x-external-userid": EUID,
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.json()["external_userid"] == EUID
+        assert resp.headers.get("cache-control") == "no-store"
+
     @pytest.mark.asyncio
     async def test_export_structure(self, client, internal_key, seeded_user):
         resp = await client.get("/api/pii/export",
@@ -104,7 +119,7 @@ class TestExport:
         assert data["kv"][f"kf:transferred:{KFID}:{EUID}"] == "1"
         assert data["kv"][f"welcome-fallback:{KFID}:{EUID}:scene123"] == "1"
         assert len(data["ratelimit"]) == 1
-        # 内存模式下 profile/privacy/last_agent 只落 Redis，应为空值
+        # fixture 未预置档案/隐私/接待人绑定，应为空值（内存路径覆盖见 test_store_memory.py）
         assert data["profile"] is None
         assert data["privacy_notice_accepted"] is False
         assert data["last_agent"] is None

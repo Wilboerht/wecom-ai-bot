@@ -3,6 +3,8 @@
 import json
 import time
 
+import pytest
+
 from src import core
 from src.ai import store
 from src.core import process_kf_messages, process_message
@@ -219,6 +221,20 @@ class TestPrivacyNotice:
 
 
 class TestProcessMessage:
+    @pytest.fixture(autouse=True)
+    def _enable_non_kf(self, monkeypatch):
+        """这些用例验证旧的非 KF AI 路径，显式打开开关。"""
+        monkeypatch.setattr(core.config, "NON_KF_AUTO_REPLY_ENABLED", True)
+
+    def test_disabled_by_default_no_ai(self, monkeypatch):
+        """默认关闭：非 KF 文本不调 AI、不写历史。"""
+        monkeypatch.setattr(core.config, "NON_KF_AUTO_REPLY_ENABLED", False)
+        calls = {"n": 0}
+        monkeypatch.setattr("src.core.chat", lambda messages, **kw: calls.__setitem__("n", calls["n"] + 1) or "x")
+        msg = TextMessage(from_user="wx-u-off", content="你好", msg_id="wxmsg-off-1")
+        assert process_message(msg) is None
+        assert calls["n"] == 0
+
     def test_ai_failure_not_written_to_history(self, monkeypatch):
         """AI 失败兜底文案不写入历史；回滚认领允许重推后重试"""
         def boom(messages, **kw):
@@ -324,6 +340,11 @@ class TestTransferKeywords:
         assert transfers == ["u-kw-zhuan"]
         assert chat_calls == 0
 
+    def test_string_keywords_are_not_iterated_by_char(self):
+        """配置允许字符串；应整体匹配，不能把「转人工」拆成单字误触发。"""
+        assert core._transfer_requested("我要转人工", "转人工") is True
+        assert core._transfer_requested("我在工作", "转人工") is False
+
 
 class TestTransferredMarker:
     """转人工跨批次标记：state=3 生效前机器人不再回复"""
@@ -398,6 +419,13 @@ class TestServiceHour:
     def test_missing_uses_default(self, monkeypatch):
         monkeypatch.delattr(core.config, "SERVICE_START_HOUR", raising=False)
         assert core._service_hour("SERVICE_START_HOUR", 10) == 10
+
+    def test_off_hours_text_follows_config(self):
+        from src import copy
+
+        text = copy.transfer_off_hours_text(9, 18)
+        assert "09:00-18:00" in text
+        assert "10:00-20:00" not in text
 
 
 class TestOrderFlowProcess:
@@ -604,6 +632,15 @@ class TestNativeLengthSplit:
         assert all(len(p.encode("utf-8")) <= 2000 for p in parts)
         assert "".join(parts) == content
 
+    def test_four_byte_emoji_hard_cut_stays_under_limit(self):
+        """4 字节 emoji 不能按 2000//3 字符切，否则单片会超过企微 2048 字节。"""
+        from src.core import _split_kf_content
+
+        content = "😀" * 3000
+        parts = _split_kf_content(content)
+        assert all(len(p.encode("utf-8")) <= 2000 for p in parts)
+        assert "".join(parts) == content
+
     def test_split_failure_returns_false(self, monkeypatch):
         """任一分片发送失败即返回 False，由调用方 msgid_release 回滚"""
         from src.core import _do_send_kf
@@ -726,6 +763,7 @@ class TestMetricsInstrumentation:
         from src import metrics
 
         before = metrics.snapshot()
+        monkeypatch.setattr(core.config, "NON_KF_AUTO_REPLY_ENABLED", True)
         monkeypatch.setattr("src.core.chat", lambda messages, **kw: "你好！")
         msg = TextMessage(from_user="wx-u-mt", content="你好", msg_id="wxmsg-mt-1")
 
@@ -733,3 +771,123 @@ class TestMetricsInstrumentation:
 
         assert self._delta(metrics.WX_MSG_RECEIVED, before) == 1
         assert self._delta(metrics.AI_REPLY_OK, before) == 1
+
+class TestMarkdownCleanup:
+    def test_decimal_and_percentage_not_mangled(self):
+        from src.core import _strip_markdown
+
+        text = "1.5倍用量\n2.5%浓度\n3. 温和洁面\n1、含神经酰胺"
+        out = _strip_markdown(text)
+        assert "1.5倍用量" in out
+        assert "2.5%浓度" in out
+        assert "3. 温和洁面" not in out
+        assert "温和洁面" in out
+        assert "1、含神经酰胺" not in out
+        assert "含神经酰胺" in out
+
+
+class TestStateSilence:
+    def test_state2_media_no_reply(self, monkeypatch):
+        sent = []
+        _patch_common(monkeypatch, sent, state=2)
+        _patch_sync(monkeypatch, [{
+            "msgid": "m-state2-media",
+            "msgtype": "image",
+            "origin": 3,
+            "external_userid": "u-state2-media",
+            "send_time": int(time.time()),
+        }])
+        process_kf_messages("t1", KFID)
+        assert sent == []
+
+    def test_state4_rate_limit_no_hint(self, monkeypatch):
+        sent = []
+        _patch_common(monkeypatch, sent, state=4)
+        monkeypatch.setattr("src.core.check_rate_limit", lambda uid, t=0: True)
+        _patch_sync(monkeypatch, [_text_msg("m-state4-rate", euid="u-state4-rate")])
+        process_kf_messages("t1", KFID)
+        assert sent == []
+
+
+class TestOrderFirstMessage:
+    def test_first_message_channel_and_order_no_skips_questions(self, monkeypatch):
+        sent, transfers = [], []
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr(
+            "src.core._handle_kf_transfer",
+            lambda kfid, uid, candidates, ctx="": transfers.append(ctx) or True,
+        )
+        _patch_sync(monkeypatch, [
+            _text_msg("m-of-first", content="我在小红书买的，订单号1234567890", euid="u-of-first")
+        ])
+        process_kf_messages("t1", KFID)
+        assert len(transfers) == 1
+        assert "小红书" in transfers[0] and "1234567890" in transfers[0]
+        assert not any("哪个平台购买" in s for s in sent)
+
+
+class TestPrivacyMemoryAndFailure:
+    def test_privacy_notice_sent_once_in_memory_mode(self, monkeypatch):
+        sent = []
+        euid = "u-privacy-memory"
+        store._inmem_privacy.pop(f"privacy:{KFID}:{euid}", None)
+        store.kv_delete(f"welcome-sent:{KFID}:{euid}")
+        monkeypatch.setattr(
+            "src.core._do_send_kf",
+            lambda kfid, uid, content, msgid="": sent.append(content) or True,
+        )
+        monkeypatch.setattr("src.wecom.wxkf.get_session_state", lambda *a, **k: 1)
+        monkeypatch.setattr("src.core.chat", lambda messages: "AI回复")
+        _patch_sync(monkeypatch, [_text_msg("m-privacy-memory-1", euid=euid)])
+        process_kf_messages("t1", KFID)
+        _patch_sync(monkeypatch, [_text_msg("m-privacy-memory-2", euid=euid)])
+        process_kf_messages("t2", KFID)
+        assert sent.count(core.PRIVACY_NOTICE_TEXT) == 1
+        store._inmem_privacy.pop(f"privacy:{KFID}:{euid}", None)
+        store.kv_delete(f"welcome-sent:{KFID}:{euid}")
+        store._inmem_sessions.pop(f"{KFID}:{euid}", None)
+        store._inmem_session_ttl.pop(f"{KFID}:{euid}", None)
+
+    def test_privacy_send_failure_not_accepted(self, monkeypatch):
+        sent, accepted = [], []
+        monkeypatch.setattr("src.core.store.privacy_notice_accepted", lambda k, u: False)
+        monkeypatch.setattr(
+            "src.core.store.privacy_notice_accept", lambda k, u: accepted.append((k, u))
+        )
+        def fake_send(kfid, uid, content, msgid=""):
+            if content == core.PRIVACY_NOTICE_TEXT:
+                return False
+            sent.append(content)
+            return True
+        monkeypatch.setattr("src.core._do_send_kf", fake_send)
+        monkeypatch.setattr("src.wecom.wxkf.get_session_state", lambda *a, **k: 1)
+        monkeypatch.setattr("src.core.chat", lambda messages: "AI回复")
+        _patch_sync(monkeypatch, [_text_msg("m-privacy-fail", euid="u-privacy-fail")])
+        process_kf_messages("t1", KFID)
+        assert accepted == []
+        assert "AI回复" in sent
+
+
+class TestCursorPagination:
+    def test_more_than_five_pages_all_processed(self, monkeypatch):
+        cursor_key = f"kf:cursor:{KFID}"
+        store.kv_delete(cursor_key)
+        pages = {}
+        cursor = ""
+        for i in range(6):
+            next_cursor = f"c{i + 1}" if i < 5 else ""
+            pages[cursor] = {
+                "msg_list": [_text_msg(f"m-cursor-{i}", euid=f"u-cursor-{i}")],
+                "next_cursor": next_cursor,
+                "has_more": 1 if i < 5 else 0,
+            }
+            cursor = next_cursor
+        def fake_sync(**kw):
+            return pages[kw.get("cursor", "")]
+        monkeypatch.setattr("src.wecom.wxkf.sync_messages", fake_sync)
+        sent = []
+        _patch_common(monkeypatch, sent, state=1)
+        monkeypatch.setattr("src.core.chat", lambda messages: "AI回复")
+        process_kf_messages("t1", KFID)
+        assert len(sent) == 6
+        store.kv_delete(cursor_key)

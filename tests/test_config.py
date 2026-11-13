@@ -18,6 +18,8 @@ def _import_config(extra_env: dict) -> subprocess.CompletedProcess:
         [sys.executable, "-c", "import src.config"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
         cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
@@ -30,6 +32,8 @@ def _read_config_value(extra_env: dict) -> subprocess.CompletedProcess:
         [sys.executable, "-c", "import src.config; print(src.config.config.DEEPSEEK_TEMPERATURE)"],
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env,
         cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     )
@@ -90,6 +94,12 @@ class TestServiceHoursValidation:
 
 
 class TestKfAccountsLoading:
+    def test_explicit_missing_accounts_file_rejected(self, tmp_path):
+        """显式配置 KF_ACCOUNTS_FILE 但文件不存在时启动失败，避免静默退化。"""
+        result = _import_config({"KF_ACCOUNTS_FILE": str(tmp_path / "missing.json")})
+        assert result.returncode != 0
+        assert "KF_ACCOUNTS_FILE 不存在" in result.stdout
+
     def test_invalid_json_friendly_error(self, tmp_path):
         bad_file = tmp_path / "bad_accounts.json"
         bad_file.write_text("{ not valid json", encoding="utf-8")
@@ -155,8 +165,26 @@ class TestKfAccountsLoading:
         assert result.returncode != 0
         assert "system_prompt 或 system_prompt_file" in result.stdout
 
-    def test_prompt_file_missing_only_warns(self, tmp_path):
-        """system_prompt_file 不存在不阻断：运行期回退内联/默认提示词"""
+    def test_prompt_file_missing_with_inline_prompt_only_warns(self, tmp_path):
+        """system_prompt_file 不存在但有内联 system_prompt 时才允许启动"""
+        knowledge = tmp_path / "knowledge.txt"
+        knowledge.write_text("知识库", encoding="utf-8")
+        accounts_file = tmp_path / "accounts.json"
+        accounts_file.write_text(
+            json.dumps({"wkTest123": {
+                "welcome": "hi",
+                "system_prompt": "内联兜底",
+                "system_prompt_file": "prompts/not_exists.txt",
+                "knowledge_file": knowledge.as_posix(),
+            }}),
+            encoding="utf-8",
+        )
+        result = _import_config({"KF_ACCOUNTS_FILE": str(accounts_file)})
+        assert result.returncode == 0, result.stdout + result.stderr
+        assert "system_prompt_file 不存在" in result.stderr
+
+    def test_prompt_file_missing_without_inline_rejected(self, tmp_path):
+        """没有内联兜底时提示词文件缺失必须阻断，避免部署漏拷静默退化"""
         knowledge = tmp_path / "knowledge.txt"
         knowledge.write_text("知识库", encoding="utf-8")
         accounts_file = tmp_path / "accounts.json"
@@ -169,7 +197,8 @@ class TestKfAccountsLoading:
             encoding="utf-8",
         )
         result = _import_config({"KF_ACCOUNTS_FILE": str(accounts_file)})
-        assert result.returncode == 0, result.stdout + result.stderr
+        assert result.returncode != 0
+        assert "system_prompt_file 不存在" in result.stdout
 
     def test_bool_field_wrong_type_rejected(self, tmp_path):
         """order_flow/knowledge_split/advisor_report 非布尔 → 阻断"""

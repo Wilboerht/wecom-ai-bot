@@ -16,6 +16,7 @@ import httpx
 
 from .config import config
 from .ai import store
+from .log_utils import mask_id
 
 logger = logging.getLogger(__name__)
 
@@ -68,12 +69,13 @@ def _fetch_report(session_id: str) -> dict | None:
                 timeout=_TIMEOUT,
             )
         except Exception as e:
+            # 不记录异常原文：httpx 异常可能带含 sessionId 的请求 URL
             if attempt == 0:
-                logger.warning("report-summary 请求失败，1s 后重试: %s", e)
+                logger.warning("report-summary 请求失败，1s 后重试: %s", type(e).__name__)
                 time.sleep(1)
                 continue
-            logger.warning("report-summary 请求失败: %s", e)
-            raise ReportFetchRetryableError(str(e))
+            logger.warning("report-summary 请求失败: %s", type(e).__name__)
+            raise ReportFetchRetryableError(type(e).__name__)
         if resp.status_code == 200:
             break
         # 5xx 重试一次；4xx（如 404 报告不存在）不重试
@@ -108,6 +110,13 @@ def _as_str_list(value) -> list[str]:
     return []
 
 
+def _as_dict_list(value) -> list[dict]:
+    """上游 issues/dimensions 归一：只接受对象数组，畸形元素忽略，避免 .get 崩溃。"""
+    if not isinstance(value, list):
+        return []
+    return [item for item in value if isinstance(item, dict)]
+
+
 def build_profile_fields(report: dict) -> dict:
     """报告摘要 → 用户护肤档案字段（与 AI 顾问档案标签一致：肤质/性别/年龄/诉求等）
 
@@ -133,12 +142,12 @@ def build_profile_fields(report: dict) -> dict:
             fields["素颜评分"] = f"{int(score)}分（超越全国{int(percentile)}%的用户）"
         else:
             fields["素颜评分"] = f"{int(score)}分"
-    issues = report.get("issues") or []
+    issues = _as_dict_list(report.get("issues"))
     if issues:
         parts = []
         for item in issues:
-            label = (item or {}).get("label") or ""
-            item_score = (item or {}).get("score")
+            label = item.get("label") or ""
+            item_score = item.get("score")
             if label and isinstance(item_score, (int, float)):
                 parts.append(f"{label}（{int(item_score)}分）")
             elif label:
@@ -147,15 +156,15 @@ def build_profile_fields(report: dict) -> dict:
             fields["重点问题"] = "、".join(parts)
     elif report.get("concerns"):
         # 纯问卷模式没有维度评分，用 AI 分析得出的关注点兜底
-        concerns = [str(c) for c in report["concerns"] if c]
+        concerns = _as_str_list(report["concerns"])
         if concerns:
             fields["重点问题"] = "、".join(concerns)
 
-    dimensions = report.get("dimensions") or []
+    dimensions = _as_dict_list(report.get("dimensions"))
     dim_parts = []
     for item in dimensions:
-        label = (item or {}).get("label") or ""
-        item_score = (item or {}).get("score")
+        label = item.get("label") or ""
+        item_score = item.get("score")
         if label and isinstance(item_score, (int, float)):
             dim_parts.append(f"{label}{int(item_score)}分")
     if dim_parts:
@@ -187,11 +196,11 @@ def build_profile_fields(report: dict) -> dict:
             has_real_allergen = any(a not in ("无过敏史", "无") for a in allergies)
             fields["过敏史"] = f"⚠️{text}" if has_real_allergen else text
         pregnancy = q.get("pregnancy")
-        if pregnancy and pregnancy != "否":
+        if pregnancy and pregnancy not in ("否", "不适用"):
             fields["孕期状态"] = f"⚠️{pregnancy}"
 
         medical = q.get("medicalBeauty")
-        if medical and medical != "无":
+        if medical and medical not in ("无", "不适用"):
             fields["医美经历(近3月)"] = str(medical)
 
         lifestyle_map = [
@@ -258,6 +267,9 @@ def build_welcome_text(report: dict) -> str:
     gender_label = {"male": "男", "female": "女"}.get(gender, "暂未填写")
     tested_at = _report_date(report)
 
+    medical = q.get("medicalBeauty")
+    medical_recorded = bool(medical) and medical not in ("无", "不适用")
+
     lines = [
         f"尊敬的{name}您好，我是 NIHPLOD 肌智派专属护肤顾问，很高兴为您服务。"
         "为了给您更贴合的护肤建议，想和您确认以下基础信息：",
@@ -266,7 +278,7 @@ def build_welcome_text(report: dict) -> str:
         f"年龄段：{_q('ageRange')}",
         f"关注问题：{'、'.join(concerns) if concerns else '暂未填写'}",
         # 医美经历属敏感个人信息，聊天中不回显具体内容，只显示是否已记录
-        f"医美经历（近3月）：{'已记录' if q.get('medicalBeauty') else '暂未填写'}",
+        f"医美经历（近3月）：{'已记录' if medical_recorded else '暂未填写'}",
         f"护肤习惯：{_q('skincareFrequency')}",
         f"最近一次的肌智派测肤时间：{tested_at.year}年{tested_at.month:02d}月{tested_at.day:02d}日",
         "",
@@ -289,11 +301,16 @@ def _send_welcome(open_kfid: str, external_userid: str, scene_param: str, event:
     去重：两条路径共用同一个 per-(用户, scene_param) 标记，发送前 kv_set_nx 原子 claim，
     任一路径成功即占用；全部失败释放标记，允许下次事件重试。
     """
+    try:
+        content = build_welcome_text(report)
+    except Exception as e:
+        # 内容构建失败不占用 7 天去重标记，允许下一次事件重试
+        logger.warning("Welcome 内容构建失败: %s", e)
+        return
     key = f"{_WELCOME_FALLBACK_PREFIX}{open_kfid}:{external_userid}:{scene_param}"
     if not store.kv_set_nx(key, "1", _WELCOME_FALLBACK_TTL):
         # 同一份报告已发过，避免用户重复点链接被刷屏
         return
-    content = build_welcome_text(report)
     ok = False
     welcome_code = (event.get("welcome_code") or "").strip()
     if welcome_code:
@@ -307,7 +324,7 @@ def _send_welcome(open_kfid: str, external_userid: str, scene_param: str, event:
                 content=content,
             )
         except Exception as e:
-            logger.warning("Welcome 发送失败: %s", e)
+            logger.warning("Welcome 发送失败: %s", type(e).__name__)
     if not ok:
         # welcome_code 缺失或发送失败：降级普通 send_msg 再试一次
         try:
@@ -322,9 +339,9 @@ def _send_welcome(open_kfid: str, external_userid: str, scene_param: str, event:
                 content=content,
             )
         except Exception as e:
-            logger.warning("Welcome 补发失败: %s", e)
+            logger.warning("Welcome 补发失败: %s", type(e).__name__)
     if ok:
-        logger.info("Welcome sent: user=%s session=%s", external_userid, _mask_session(scene_param))
+        logger.info("Welcome sent: user=%s session=%s", mask_id(external_userid), _mask_session(scene_param))
         # 与通用欢迎语（首条消息时发送，见 core.process_kf_messages）共用去重标记：
         # 已收到报告个性化欢迎语的用户，不再收到账号通用欢迎语
         store.kv_set(f"welcome-sent:{open_kfid}:{external_userid}", "1", 86400 * 365)
@@ -362,7 +379,7 @@ def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> b
     except Exception as e:
         logger.warning("报告档案写入失败: %s", e)
         return False
-    logger.info("Report profile saved: user=%s session=%s fields=%s", external_userid, _mask_session(scene_param), list(fields))
+    logger.info("Report profile saved: user=%s session=%s fields=%s", mask_id(external_userid), _mask_session(scene_param), list(fields))
 
     # 欢迎语：报告存在才发送；发送失败不视为处理失败（标记已释放，下次事件可重试）
     if config.KF_SEND_WELCOME:

@@ -106,6 +106,22 @@ class TestDeepSeekChat:
             # timeout 参数透传给 httpx
             assert mock_get_client.return_value.post.call_args.kwargs["timeout"] == 4.5
 
+    def test_empty_content_raises_ai_error(self):
+        """AI 返回空内容/被内容过滤时不能把空字符串发给用户。"""
+        from src.ai.deepseek import AIServiceError, chat
+
+        with patch("src.ai.deepseek._get_client") as mock_get_client:
+            mock_resp = MagicMock()
+            mock_resp.json.return_value = {
+                "choices": [{"message": {"content": "   "}, "finish_reason": "stop"}],
+                "usage": {},
+            }
+            mock_resp.raise_for_status.return_value = None
+            mock_get_client.return_value.post.return_value = mock_resp
+
+            with pytest.raises(AIServiceError):
+                chat([{"role": "user", "content": "hi"}])
+
     def test_chat_payload_uses_config_temperature(self):
         """payload 的 temperature 取自 config（.env 可配，默认 0.3），不再硬编码"""
         from src.ai.deepseek import chat

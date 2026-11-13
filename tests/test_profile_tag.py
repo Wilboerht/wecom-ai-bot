@@ -83,15 +83,19 @@ class TestSaveProfileFromReply:
         assert saved["肤质"] == "润" * 100
 
 
-class TestProfileNoRedisWarning:
-    def test_warns_once_and_writes_dropped(self, monkeypatch, caplog):
+class TestProfileMemoryMode:
+    def test_memory_profile_works_and_warns_once(self, monkeypatch, caplog):
+        """未配置 Redis 时档案落内存：可读写，告警只打一次。"""
         monkeypatch.setattr(store, "_get_redis", lambda: None)
-        monkeypatch.setattr(store, "_profile_no_redis_warned", False)
-        with caplog.at_level(logging.WARNING, logger="src.ai.store"):
-            store.profile_update("wk", "u1", {"肤质": "油性"})
-            store.profile_get("wk", "u1")
-            store.profile_update("wk", "u1", {"肤质": "干性"})
-        disabled_msgs = [r for r in caplog.records if "档案功能已停用" in r.getMessage()]
-        assert len(disabled_msgs) == 1
-        dropped_msgs = [r for r in caplog.records if "档案写入被丢弃" in r.getMessage()]
-        assert len(dropped_msgs) == 2
+        monkeypatch.setattr(store, "_memory_mode_warned", False)
+        uid = "u-memory-profile"
+        try:
+            with caplog.at_level(logging.WARNING, logger="src.ai.store"):
+                store.profile_update("wk", uid, {"肤质": "油性"})
+                assert store.profile_get("wk", uid)["肤质"] == "油性"
+                store.profile_update("wk", uid, {"肤质": "干性"})
+            assert store.profile_get("wk", uid)["肤质"] == "干性"
+            memory_msgs = [r for r in caplog.records if "使用内存存储" in r.getMessage()]
+            assert len(memory_msgs) == 1
+        finally:
+            store._inmem_profiles.pop(f"profile:wk:{uid}", None)

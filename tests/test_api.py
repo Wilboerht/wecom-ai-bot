@@ -196,22 +196,16 @@ class TestCallbackMessage:
         with pytest.MonkeyPatch.context() as mp:
             mp.setenv("DEEPSEEK_API_KEY", "sk-test-key")
 
-            from unittest.mock import AsyncMock, patch
-
-            with patch("src.core.chat") as mock_chat:
-                mock_chat.return_value = "你好！有什么可以帮你的？"
-
-                resp = await client.post(
-                    "/callback",
-                    params=params,
-                    content=body,
-                    headers={"Content-Type": "text/xml"},
-                )
+            resp = await client.post(
+                "/callback",
+                params=params,
+                content=body,
+                headers={"Content-Type": "text/xml"},
+            )
 
         assert resp.status_code == 200
-        # 响应应包含加密的 XML
-        assert "<Encrypt>" in resp.text
-        assert "<MsgSignature>" in resp.text
+        # 非 KF 路径默认关闭客户文本 AI：不回被动消息
+        assert resp.text == ""
 
     @pytest.mark.asyncio
     async def test_event_enter_agent(self, client):
@@ -374,7 +368,7 @@ class TestHealthMiddleware:
 
     @pytest.mark.asyncio
     async def test_other_route_error_returns_200(self):
-        """其余路由维持 200 兜底（回调防企微重试风暴是有意的）"""
+        """回调路由维持 200 兜底（防企微重试风暴是有意的）"""
         from types import SimpleNamespace
 
         from src.main import catch_errors
@@ -386,3 +380,18 @@ class TestHealthMiddleware:
 
         resp = await catch_errors(request, boom)
         assert resp.status_code == 200
+
+    @pytest.mark.asyncio
+    async def test_api_error_returns_500(self):
+        """内部 API 的未处理异常不能被吞成 200，否则调用方会误判成功。"""
+        from types import SimpleNamespace
+
+        from src.main import catch_errors
+
+        request = SimpleNamespace(url=SimpleNamespace(path="/api/pii/export"))
+
+        async def boom(_):
+            raise RuntimeError("api broken")
+
+        resp = await catch_errors(request, boom)
+        assert resp.status_code == 500

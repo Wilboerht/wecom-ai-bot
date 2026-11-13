@@ -33,12 +33,18 @@ BANNED_SANITIZED = "banned_reply_sanitized"  # 输出侧禁语命中替换次数
 WX_BUDGET_TIMEOUT = "wx_budget_timeout"      # 公众号路径 AI 超出 5s 响应预算返回兜底次数
 STAGE_FIELD_INVALID = "stage_field_invalid"  # 阶段字段（日期格式）校验失败剔除次数
 AI_TRUNCATED = "ai_reply_truncated"          # AI 回复被 max_tokens 截断次数（finish_reason=length）
+AI_EMPTY_RESPONSE = "ai_empty_response"      # AI 返回空内容/被内容过滤次数
+KF_QUEUE_ENQUEUED = "kf_queue_enqueued"      # KF 任务入队数
+KF_QUEUE_PROCESSED = "kf_queue_processed"    # KF 任务成功处理数
+KF_QUEUE_RETRIED = "kf_queue_retried"        # KF 任务失败后重新入队数
+KF_QUEUE_DEAD = "kf_queue_dead"              # KF 任务进入死信数
 REVIEW_TRIGGERED = "review_triggered"        # 阶段复评指令触达用户数（每随访周期一次）
 # 阶段状态机流转计数（复评裁决结果的可观测性，防止「模型当裁判」黑盒）
 STAGE_STARTED = "stage_started"              # 首次进入阶段（新方案）
 STAGE_PROMOTED = "stage_promoted"            # 晋级（阶段 N 变大）
 STAGE_HELD = "stage_held"                    # 留级/阶段内调整（阶段 N 不变）
 STAGE_REGRESSED = "stage_regressed"          # 回退（阶段 N 变小，如恶化回打底期）
+STAGE_TRANSITION_INVALID = "stage_transition_invalid"  # 非法阶段跳变被代码拒绝（如 1→3）
 
 
 def inc(name: str, n: int = 1) -> None:

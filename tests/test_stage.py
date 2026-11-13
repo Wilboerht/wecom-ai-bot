@@ -112,6 +112,17 @@ class TestBuildProfileBlock:
         assert "【当前阶段状态】" not in text
         assert "阶段复评日" not in text
 
+    def test_stage_only_profile_still_rendered(self):
+        """只有阶段字段、没有基础字段时，阶段块和复评检测不能被提前 return 丢掉。"""
+        text = core.build_profile_block({
+            "当前阶段": "屏障修护期（阶段1/3）",
+            "阶段目标": "泛红消退",
+            "阶段开始": "2025-06-01",
+            "晋级条件": "连续一周无泛红",
+        })
+        assert "【当前阶段状态】" in text
+        assert "当前阶段=屏障修护期（阶段1/3）" in text
+
     def test_stage_block_rendered(self):
         profile = {
             "当前阶段": "屏障修护期（阶段1/3）",
@@ -241,3 +252,44 @@ class TestReviewDueDedup:
 
         core.process_kf_messages("t1", kfid)
         assert store.kv_get(f"review-due:{kfid}:{euid}:2025-01-01") == ""
+
+class TestStageStateMachine:
+    def test_illegal_jump_rejected(self, monkeypatch):
+        """1→3 跳级被代码拒绝：保留旧阶段，不写入新阶段/随访，计数可观测。"""
+        metrics.snapshot(reset=True)
+        saved = {}
+        monkeypatch.setattr(store, "profile_update", lambda k, u, f: saved.update(f))
+        monkeypatch.setattr(
+            store,
+            "profile_get",
+            lambda k, u: {"当前阶段": "屏障修护期（阶段1/3）", "阶段开始": "2025-01-01"},
+        )
+        core._save_profile_from_reply(
+            "wk", "u1", "晋级。[档案: 当前阶段=巩固期（阶段3/3）]"
+        )
+        assert "当前阶段" not in saved
+        assert "随访时间" not in saved
+        assert metrics.snapshot()[metrics.STAGE_TRANSITION_INVALID] == 1
+
+    def test_regression_allowed(self, monkeypatch):
+        """3→1 回退是合法路径（过敏/爆痘恶化回打底期）。"""
+        saved = {}
+        monkeypatch.setattr(store, "profile_update", lambda k, u, f: saved.update(f))
+        monkeypatch.setattr(
+            store,
+            "profile_get",
+            lambda k, u: {"当前阶段": "巩固期（阶段3/3）", "阶段开始": "2025-01-01"},
+        )
+        today = datetime.now(ZoneInfo("Asia/Shanghai")).date()
+        core._save_profile_from_reply(
+            "wk", "u1", "回退。[档案: 当前阶段=屏障修护期（阶段1/3）]"
+        )
+        assert saved["当前阶段"] == "屏障修护期（阶段1/3）"
+        assert saved["阶段开始"] == today.isoformat()
+        assert saved["随访时间"] == (today + timedelta(days=14)).isoformat()
+
+    def test_normalize_profile_fields_limits(self):
+        from src.domain.profile import normalize_profile_fields
+
+        normalized = normalize_profile_fields({"肤质": "  干性\n", "bad key!": "x", "诉求": "泛红"})
+        assert normalized == {"肤质": "干性", "诉求": "泛红"}

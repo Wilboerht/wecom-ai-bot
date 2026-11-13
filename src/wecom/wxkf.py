@@ -9,6 +9,7 @@ import threading
 import time
 import httpx
 from httpx import Client
+from ..log_utils import mask_id
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
@@ -75,14 +76,17 @@ def _fetch_access_token(corpid: str, secret: str) -> tuple:
                 params={"corpid": corpid, "corpsecret": secret},
             )
             data = resp.json()
-        except httpx.HTTPError as e:
+        except (httpx.HTTPError, ValueError) as e:
             last_exc = e
-            logger.warning("gettoken 网络异常(第%d次): %s", attempt + 1, e)
+            # 不记录异常原文：httpx 异常可能带含 corpsecret 的请求 URL
+            logger.warning("gettoken 网络/响应异常(第%d次): %s", attempt + 1, type(e).__name__)
             continue
+        if not isinstance(data, dict):
+            raise WecomApiError("获取access_token失败: 响应不是 JSON 对象")
         if data.get("errcode", 0) != 0:
             raise WecomApiError(f"获取access_token失败: {data}")
         return data["access_token"], data.get("expires_in", 7200)
-    raise WecomApiError(f"gettoken 网络异常，重试耗尽: {last_exc}")
+    raise WecomApiError(f"gettoken 网络异常，重试耗尽: {type(last_exc).__name__}")
 
 
 def _post_with_retry(url: str, access_token: str, payload: dict, action: str) -> dict:
@@ -97,11 +101,17 @@ def _post_with_retry(url: str, access_token: str, payload: dict, action: str) ->
             time.sleep(delay)
         try:
             resp = _client.post(url, params={"access_token": access_token}, json=payload)
-            return resp.json()
-        except httpx.HTTPError as e:
+            data = resp.json()
+        except (httpx.HTTPError, ValueError) as e:
             last_exc = e
-            logger.warning("%s 网络异常(第%d次): %s", action, attempt + 1, e)
-    raise WecomApiError(f"{action} 网络异常，重试耗尽: {last_exc}")
+            logger.warning("%s 网络/响应异常(第%d次): %s", action, attempt + 1, type(e).__name__)
+            continue
+        if not isinstance(data, dict):
+            last_exc = WecomApiError(f"{action} 响应不是 JSON 对象")
+            logger.warning("%s 响应不是 JSON 对象(第%d次)", action, attempt + 1)
+            continue
+        return data
+    raise WecomApiError(f"{action} 网络异常，重试耗尽: {type(last_exc).__name__}")
 
 
 def _api_post(url: str, corpid: str, secret: str, payload: dict, action: str) -> dict:
@@ -206,7 +216,7 @@ def send_message(
         logger.error("send_msg 失败: %s", e)
         return False
 
-    logger.info("send_msg 成功: to=%s", to_user)
+    logger.info("send_msg 成功: to=%s", mask_id(to_user))
     return True
 
 

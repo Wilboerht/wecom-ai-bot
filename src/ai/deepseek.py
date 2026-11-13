@@ -77,7 +77,12 @@ def chat(messages: list[dict], timeout: float = 28.0, max_retries: int = 2) -> s
                 # 回复被 max_tokens 截断：内容已残缺（护肤方案可能少半截），计数并告警便于调整上限
                 metrics.inc(metrics.AI_TRUNCATED)
                 logger.warning("DeepSeek 回复被 max_tokens 截断: completion_tokens=%s", usage.get("completion_tokens"))
-            return choice["message"]["content"]
+            content = (choice.get("message") or {}).get("content")
+            if not isinstance(content, str) or not content.strip():
+                # content filter / 空回复：不能把空字符串发给用户，走 AI 故障兜底
+                metrics.inc(metrics.AI_EMPTY_RESPONSE)
+                raise AIServiceError("empty response")
+            return content
 
         except HTTPStatusError as e:
             status = e.response.status_code

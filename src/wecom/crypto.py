@@ -13,11 +13,12 @@ import base64
 import hashlib
 import hmac
 import logging
-import random
+import secrets
 import string
 import struct
 import time
 from Crypto.Cipher import AES
+from ..log_utils import sanitize_log_value
 
 logger = logging.getLogger(__name__)
 
@@ -75,9 +76,8 @@ class WXBizMsgCrypt:
         return hashlib.sha1(raw.encode()).hexdigest()
 
     def _generate_nonce(self) -> str:
-        return "".join(
-            random.choices(string.ascii_letters + string.digits, k=16)
-        )
+        alphabet = string.ascii_letters + string.digits
+        return "".join(secrets.choice(alphabet) for _ in range(16))
 
     def _generate_timestamp(self) -> str:
         return str(int(time.time()))
@@ -99,7 +99,11 @@ class WXBizMsgCrypt:
         """
         computed = self._compute_signature(timestamp, nonce, echostr)
         if not hmac.compare_digest(computed, msg_signature):
-            logger.warning("签名验证失败: timestamp=%s nonce=%s", timestamp, nonce)
+            logger.warning(
+                "签名验证失败: timestamp=%s nonce=%s",
+                sanitize_log_value(timestamp, 32),
+                sanitize_log_value(nonce, 32),
+            )
             raise SignatureError("签名验证失败")
 
         try:
@@ -143,7 +147,11 @@ class WXBizMsgCrypt:
         """
         computed = self._compute_signature(timestamp, nonce, encrypt)
         if not hmac.compare_digest(computed, msg_signature):
-            logger.warning("签名验证失败: timestamp=%s nonce=%s", timestamp, nonce)
+            logger.warning(
+                "签名验证失败: timestamp=%s nonce=%s",
+                sanitize_log_value(timestamp, 32),
+                sanitize_log_value(nonce, 32),
+            )
             raise SignatureError("签名验证失败")
 
         try:
@@ -190,7 +198,7 @@ class WXBizMsgCrypt:
         nonce = nonce or self._generate_nonce()
         timestamp = timestamp or self._generate_timestamp()
 
-        random_bytes = bytes(random.randint(0, 255) for _ in range(16))
+        random_bytes = secrets.token_bytes(16)
         msg_bytes = msg.encode("utf-8")
         msg_len_bytes = struct.pack("!I", len(msg_bytes))
         corp_id_bytes = self.corp_id.encode("utf-8")

@@ -74,6 +74,12 @@ class TestSanitizeReply:
         assert "无法治愈" in text
         assert "治愈" not in hits
 
+    def test_healing_style_phrase_not_replaced(self):
+        """「治愈系」是常见非医疗用法，不能被替换成「辅助改善系」。"""
+        text, hits = sanitize_reply("淡雅高级的治愈系香型")
+        assert text == "淡雅高级的治愈系香型"
+        assert "治愈" not in hits
+
 
 class TestKfPipelineIntegration:
     """kf 链路：AI 回复发出前必须经过禁语清洗"""

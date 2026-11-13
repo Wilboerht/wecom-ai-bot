@@ -121,6 +121,22 @@ class TestRedisDownFallback:
 class TestProfileRobustness:
     """档案上限、脏数据容错与报告字段原子替换"""
 
+    def test_session_corrupt_item_does_not_global_downgrade(self, fake_redis, monkeypatch, caplog):
+        down_calls = []
+        monkeypatch.setattr(store, "_redis_down", lambda e: down_calls.append(e))
+        fake_redis.rpush(f"{store.SESSION_PREFIX}corrupt", '{"role":"user","content":"ok"}', "{bad-json")
+        with caplog.at_level(logging.WARNING, logger="src.ai.store"):
+            history = store.session_get("corrupt")
+        assert history == [{"role": "user", "content": "ok"}]
+        assert down_calls == []
+        assert any("会话记录 JSON 损坏" in r.getMessage() for r in caplog.records)
+
+    def test_profile_non_dict_json_cleared(self, fake_redis, monkeypatch):
+        monkeypatch.setattr(store, "_redis_down", lambda e: (_ for _ in ()).throw(AssertionError("不应降级")))
+        fake_redis.set(f"{store._PROFILE_PREFIX}kf1:list", "[]")
+        assert store.profile_get("kf1", "list") == {}
+        assert fake_redis.get(f"{store._PROFILE_PREFIX}kf1:list") is None
+
     def test_max_keys_drops_new_but_updates_existing(self, fake_redis, caplog):
         # 先塞满 50 个 key
         store.profile_update("kf1", "cap1", {f"key{i:02d}": "v" for i in range(store.PROFILE_MAX_KEYS)})
