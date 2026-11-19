@@ -179,7 +179,7 @@ class TestHumanSessionMedia:
 
 class TestPrivacyNotice:
     def test_first_session_sends_privacy_notice(self, monkeypatch):
-        """首次会话：先发账号欢迎语（去重标记），再发隐私声明，然后正常处理当条消息"""
+        """首次会话先发欢迎语和隐私告知；未回复同意前不调用 AI。"""
         sent = []
         accepted = []
         monkeypatch.setattr(
@@ -196,8 +196,12 @@ class TestPrivacyNotice:
 
         assert sent[0] == "您好，欢迎来到 NIHPLOD 旎柏，很高兴为您服务。请问有什么可以帮到您？如需人工客服，请回复「转人工」。"
         assert sent[1] == core.PRIVACY_NOTICE_TEXT
-        assert sent[2] == "AI回复"
+        assert accepted == []
+
+        _patch_sync(monkeypatch, [_text_msg("m-privacy-consent", content="同意", euid="u-privacy")])
+        process_kf_messages("t2", KFID)
         assert accepted == ["u-privacy"]
+        assert core.PRIVACY_CONSENT_ACCEPTED_TEXT in sent
         store.kv_delete(f"welcome-sent:{KFID}:u-privacy")
 
     def test_welcome_not_resent_when_report_welcome_already_sent(self, monkeypatch):
@@ -215,7 +219,7 @@ class TestPrivacyNotice:
         _patch_sync(monkeypatch, [_text_msg("m-privacy-2", euid="u-privacy-dup")])
         try:
             process_kf_messages("t1", KFID)
-            assert sent == [core.PRIVACY_NOTICE_TEXT, "AI回复"]
+            assert sent == [core.PRIVACY_NOTICE_TEXT]
         finally:
             store.kv_delete(f"welcome-sent:{KFID}:u-privacy-dup")
 
@@ -865,7 +869,7 @@ class TestPrivacyMemoryAndFailure:
         _patch_sync(monkeypatch, [_text_msg("m-privacy-fail", euid="u-privacy-fail")])
         process_kf_messages("t1", KFID)
         assert accepted == []
-        assert "AI回复" in sent
+        assert "AI回复" not in sent
 
 
 class TestCursorPagination:

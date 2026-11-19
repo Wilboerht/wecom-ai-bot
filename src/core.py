@@ -316,6 +316,20 @@ def handle_callback(body: str, query: dict, crypto: WXBizMsgCrypt) -> dict:
 # 用户可见固定文案集中在 src/copy.py（文案术语表见 docs/copy-style-guide.md）；
 # 别名保持 core.PRIVACY_NOTICE_TEXT 可引用（测试与既有调用方）
 PRIVACY_NOTICE_TEXT = copy.PRIVACY_NOTICE_TEXT
+PRIVACY_CONSENT_ACCEPTED_TEXT = copy.PRIVACY_CONSENT_ACCEPTED_TEXT
+PRIVACY_CONSENT_DECLINED_TEXT = copy.PRIVACY_CONSENT_DECLINED_TEXT
+PRIVACY_CONSENT_REQUIRED_TEXT = copy.PRIVACY_CONSENT_REQUIRED_TEXT
+
+def _normalize_consent_text(text: str) -> str:
+    return (text or "").strip().strip("。！!，,；;：: 　")
+
+
+def _is_privacy_consent(text: str) -> bool:
+    return _normalize_consent_text(text) in {"同意", "我同意", "同意并继续", "同意隐私政策", "同意处理"}
+
+
+def _is_privacy_decline(text: str) -> bool:
+    return _normalize_consent_text(text) in {"不同意", "拒绝", "不同意隐私政策", "不同意处理"}
 
 
 def process_kf_messages(token: str, open_kfid: str) -> None:
@@ -552,11 +566,30 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
                 if welcome and not store.kv_get(welcome_key):
                     if _do_send_kf(open_kfid, external_userid, welcome):
                         store.kv_set(welcome_key, "1", 86400 * 365)
-                # 只有隐私声明真正送达才记录同意；发送失败下一条消息会重试
-                if _do_send_kf(open_kfid, external_userid, PRIVACY_NOTICE_TEXT):
-                    store.privacy_notice_accept(open_kfid, external_userid)
 
-            # AI 可处理
+                if _is_privacy_consent(user_text):
+                    store.privacy_notice_accept(open_kfid, external_userid)
+                    _do_send_kf(open_kfid, external_userid, copy.PRIVACY_CONSENT_ACCEPTED_TEXT)
+                    return
+                if _is_privacy_decline(user_text):
+                    _do_send_kf(open_kfid, external_userid, copy.PRIVACY_CONSENT_DECLINED_TEXT)
+                    return
+                if transfer_hit:
+                    _do_send_kf(open_kfid, external_userid, PRIVACY_NOTICE_TEXT)
+                    ctx = _merge_flow_context(external_userid, user_text)
+                    if _handle_kf_transfer(open_kfid, external_userid, candidates, ctx):
+                        _transferred_in_batch.add(external_userid)
+                        store.kv_delete(_order_flow_key(open_kfid, external_userid))
+                    return
+
+                notice_key = f"privacy-notice-sent:{open_kfid}:{external_userid}"
+                if not store.kv_get(notice_key):
+                    if _do_send_kf(open_kfid, external_userid, PRIVACY_NOTICE_TEXT):
+                        store.kv_set(notice_key, "1", 3600)
+                else:
+                    _do_send_kf(open_kfid, external_userid, copy.PRIVACY_CONSENT_REQUIRED_TEXT)
+                return
+
             if transfer_hit:
                 metrics.inc(metrics.TRANSFER_REQUESTED)
                 logger.info("KF transfer triggered: user=%s text_len=%d", mask_id(external_userid), len(user_text))
@@ -703,6 +736,9 @@ def _handle_enter_session_event(open_kfid: str, event: dict) -> bool:
     external_userid = (event.get("external_userid") or "").strip()
     if not external_userid:
         return True
+    # 未取得明确同意前，不拉取报告、不写入档案，只发送隐私告知。
+    if not store.privacy_notice_accepted(open_kfid, external_userid):
+        return bool(_do_send_kf(open_kfid, external_userid, PRIVACY_NOTICE_TEXT))
     try:
         from .advisor_report import handle_enter_session
 
