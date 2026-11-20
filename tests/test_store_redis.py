@@ -1,4 +1,4 @@
-"""store.py Redis 真实路径测试（fakeredis 内存实现，不连真实 Redis）
+﻿"""store.py Redis 真实路径测试（fakeredis 内存实现，不连真实 Redis）
 
 conftest 的 autouse fixture 强制 _get_redis → None（其他测试依赖内存模式）；
 本模块用自己的 fixture 在其之后重新注入 fakeredis 客户端，覆盖 Redis 分支。
@@ -216,7 +216,7 @@ class TestPiiExportDeleteRedis:
 
         deleted = store.delete_user_data("kf1", "eu2")
         assert set(deleted) == {
-            "sess:kf1:eu2", "profile:kf1:eu2", "privacy:kf1:eu2",
+            "sess:kf1:eu2", "profile:kf1:eu2", store._privacy_key("kf1", "eu2"),
             "agent:eu2", "rl:eu2",
             "orderflow:kf1:eu2", "kf:transferred:kf1:eu2",
             "welcome-fallback:kf1:eu2:sc1",

@@ -499,6 +499,41 @@ class TestHandleEnterSessionReturn:
             "kfc7834894b7ee2b86a", "wm_ret_5", {"scene_param": "sess-ret-0005"}
         ) is False
 
+    def test_mapping_created_when_profile_fields_empty(self, monkeypatch):
+        """报告只有 userId、没有可写入档案字段时，也要建立 KF 身份映射。"""
+        self._setup(monkeypatch)
+        linked = []
+        monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: {"found": True, "userId": "user-empty"})
+        monkeypatch.setattr(
+            "src.kf_consent.link_identity",
+            lambda kfid, euid, uid: linked.append((kfid, euid, uid)),
+        )
+
+        assert advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_ret_empty", {"scene_param": "sess-ret-empty"}
+        ) is True
+        assert linked == [("kfc7834894b7ee2b86a", "wm_ret_empty", "user-empty")]
+
+    def test_mapping_created_before_profile_write_failure(self, monkeypatch):
+        """档案写入失败时，已有 userId 的映射仍应写入。"""
+        self._setup(monkeypatch)
+        linked = []
+        monkeypatch.setattr(advisor_report, "_fetch_report", lambda sid: {**FAKE_REPORT, "userId": "user-fail"})
+        monkeypatch.setattr(
+            "src.kf_consent.link_identity",
+            lambda kfid, euid, uid: linked.append((kfid, euid, uid)),
+        )
+
+        def boom(a, b, c, d):
+            raise RuntimeError("redis boom")
+
+        monkeypatch.setattr("src.advisor_report.store.profile_replace_report_keys", boom)
+
+        assert advisor_report.handle_enter_session(
+            "kfc7834894b7ee2b86a", "wm_ret_fail", {"scene_param": "sess-ret-fail"}
+        ) is False
+        assert linked == [("kfc7834894b7ee2b86a", "wm_ret_fail", "user-fail")]
+
 
 class TestFetchReportRobustness:
     def test_non_dict_json_returns_none(self, monkeypatch):

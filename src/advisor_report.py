@@ -368,6 +368,14 @@ def handle_enter_session(open_kfid: str, external_userid: str, event: dict) -> b
     if not report:
         return True
 
+    # 映射不依赖档案字段/Redis 写入是否成功，只要报告能解析出主站 userId 就建立。
+    user_id = str(report.get("userId") or "").strip()
+    if user_id:
+        store.kv_set(f"kf-user:{open_kfid}:{external_userid}", user_id, 86400 * 365)
+        from .kf_consent import link_identity
+
+        link_identity(open_kfid, external_userid, user_id)
+
     fields = build_profile_fields(report)
     if not fields:
         return True

@@ -64,6 +64,12 @@ class Config:
 
         # 测肤报告联动（enter_session → scene_param → 拉取报告写档案）
         self.INTERNAL_API_KEY = os.getenv("INTERNAL_API_KEY", "")
+        # 主站内部接口（KF 外部身份映射 + 同意事件持久化）
+        self.KF_MAIN_API_BASE = os.getenv(
+            "KF_MAIN_API_BASE", "http://127.0.0.1:3000"
+        ).rstrip("/")
+        self.KF_MAIN_INTERNAL_KEY = os.getenv("KF_MAIN_INTERNAL_KEY", "")
+        self.KF_MAIN_INTERNAL_SECRET = os.getenv("KF_MAIN_INTERNAL_SECRET", "")
         self.ADVISOR_REPORT_API_URL = os.getenv(
             "ADVISOR_REPORT_API_URL",
             "https://advisor-api.example.com/api/internal/report-summary",

@@ -1,4 +1,6 @@
-"""内存模式下的档案/隐私/接待人绑定与 PII 覆盖。"""
+﻿"""内存模式下的档案/隐私/接待人绑定与 PII 覆盖。"""
+
+import time
 
 from src.ai import store
 
@@ -30,7 +32,22 @@ class TestMemoryProfilePrivacyAgent:
             store.privacy_notice_accept(kfid, euid)
             assert store.privacy_notice_accepted(kfid, euid) is True
         finally:
-            store._inmem_privacy.pop(f"privacy:{kfid}:{euid}", None)
+            store._inmem_privacy.pop(store._privacy_key(kfid, euid), None)
+
+    def test_legacy_privacy_key_does_not_count_as_current_consent(self, monkeypatch):
+        monkeypatch.setattr(store, "_get_redis", lambda: None)
+        monkeypatch.setattr(store, "_memory_mode_warned", True)
+        kfid, euid = "wkMem", "uMemLegacyPrivacy"
+        legacy_key = store._legacy_privacy_key(kfid, euid)
+        try:
+            store._inmem_privacy[legacy_key] = time.time() + 3600
+            assert store.privacy_notice_accepted(kfid, euid) is False
+
+            store.privacy_notice_accept(kfid, euid)
+            assert store.privacy_notice_accepted(kfid, euid) is True
+        finally:
+            store._inmem_privacy.pop(legacy_key, None)
+            store._inmem_privacy.pop(store._privacy_key(kfid, euid), None)
 
     def test_last_agent_roundtrip(self, monkeypatch):
         monkeypatch.setattr(store, "_get_redis", lambda: None)
@@ -61,7 +78,7 @@ class TestMemoryProfilePrivacyAgent:
 
             deleted = store.delete_user_data(kfid, euid)
             assert f"profile:{kfid}:{euid}" in deleted
-            assert f"privacy:{kfid}:{euid}" in deleted
+            assert store._privacy_key(kfid, euid) in deleted
             assert f"agent:{euid}" in deleted
             again = store.export_user_data(kfid, euid)
             assert again["profile"] is None
@@ -71,5 +88,5 @@ class TestMemoryProfilePrivacyAgent:
             store._inmem_sessions.pop(uid, None)
             store._inmem_session_ttl.pop(uid, None)
             store._inmem_profiles.pop(f"profile:{kfid}:{euid}", None)
-            store._inmem_privacy.pop(f"privacy:{kfid}:{euid}", None)
+            store._inmem_privacy.pop(store._privacy_key(kfid, euid), None)
             store._inmem_last_agent.pop(euid, None)

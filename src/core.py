@@ -569,6 +569,14 @@ def process_kf_messages(token: str, open_kfid: str) -> None:
 
                 if _is_privacy_consent(user_text):
                     store.privacy_notice_accept(open_kfid, external_userid)
+                    from .kf_consent import record_event
+
+                    record_event(
+                        open_kfid,
+                        external_userid,
+                        "GRANTED",
+                        store.PRIVACY_NOTICE_VERSION,
+                    )
                     _do_send_kf(open_kfid, external_userid, copy.PRIVACY_CONSENT_ACCEPTED_TEXT)
                     return
                 if _is_privacy_decline(user_text):

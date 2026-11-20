@@ -1,4 +1,4 @@
-"""微信客服消息处理 — 去重/失败回滚/隐私告知/人工接待 行为测试"""
+﻿"""微信客服消息处理 — 去重/失败回滚/隐私告知/人工接待 行为测试"""
 
 import json
 import time
@@ -834,7 +834,7 @@ class TestPrivacyMemoryAndFailure:
     def test_privacy_notice_sent_once_in_memory_mode(self, monkeypatch):
         sent = []
         euid = "u-privacy-memory"
-        store._inmem_privacy.pop(f"privacy:{KFID}:{euid}", None)
+        store._inmem_privacy.pop(store._privacy_key(KFID, euid), None)
         store.kv_delete(f"welcome-sent:{KFID}:{euid}")
         monkeypatch.setattr(
             "src.core._do_send_kf",
@@ -847,7 +847,7 @@ class TestPrivacyMemoryAndFailure:
         _patch_sync(monkeypatch, [_text_msg("m-privacy-memory-2", euid=euid)])
         process_kf_messages("t2", KFID)
         assert sent.count(core.PRIVACY_NOTICE_TEXT) == 1
-        store._inmem_privacy.pop(f"privacy:{KFID}:{euid}", None)
+        store._inmem_privacy.pop(store._privacy_key(KFID, euid), None)
         store.kv_delete(f"welcome-sent:{KFID}:{euid}")
         store._inmem_sessions.pop(f"{KFID}:{euid}", None)
         store._inmem_session_ttl.pop(f"{KFID}:{euid}", None)

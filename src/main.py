@@ -4,6 +4,7 @@ NIHPLOD 旎柏 AI 智能客服 — FastAPI 服务入口
 启动: uvicorn src.main:app --host 0.0.0.0 --port 8080
 """
 import hmac
+import json
 import logging
 import re
 import threading
@@ -38,9 +39,23 @@ kf_queue = ReliableQueue(
 )
 
 
+def _kf_consent_retry_loop() -> None:
+    from .kf_consent import flush_outbox
+
+    while True:
+        try:
+            sent = flush_outbox()
+            if sent:
+                logger.info("KF consent outbox flushed: %s", sent)
+        except Exception as exc:
+            logger.warning("KF consent outbox retry failed: %s", type(exc).__name__)
+        time.sleep(60)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     kf_queue.start()
+    threading.Thread(target=_kf_consent_retry_loop, daemon=True).start()
     try:
         yield
     finally:
@@ -266,7 +281,41 @@ def pii_delete(
         logger.error("PII 删除失败: open_kfid=%s err=%s", open_kfid, e)
         return JSONResponse({"error": "delete failed"}, status_code=500)
     categories = [k.split(":")[0] for k in deleted]
-    logger.info("PII 删除: open_kfid=%s euid=%s 删除类别=%s", open_kfid, mask_id(external_userid), categories)
+    logger.info("PII ɾ��: open_kfid=%s euid=%s ɾ�����=%s", open_kfid, mask_id(external_userid), categories)
+    return {"deleted": deleted}
+
+
+@app.post("/api/internal/pii/delete")
+async def internal_pii_delete(request: Request):
+    """主站注销时调用：按 HMAC 签名删除 KF 外部用户数据。"""
+    body = await request.body()
+    from .kf_consent import verify_main_request
+
+    if not verify_main_request(request.headers, "/api/internal/pii/delete", body):
+        return JSONResponse({"error": "unauthorized"}, status_code=401)
+
+    try:
+        data = json.loads(body)
+        open_kfid = str(data.get("openKfid") or data.get("open_kfid") or "").strip()
+        external_userid = str(
+            data.get("externalUserId") or data.get("external_userid") or ""
+        ).strip()
+    except Exception:
+        return JSONResponse({"error": "invalid body"}, status_code=400)
+    if not _PII_ID_RE.fullmatch(open_kfid) or not _PII_ID_RE.fullmatch(external_userid):
+        return JSONResponse({"error": "invalid params"}, status_code=400)
+
+    try:
+        deleted = store.delete_user_data(open_kfid, external_userid)
+    except Exception as e:
+        logger.error("KF internal PII delete failed: open_kfid=%s err=%s", open_kfid, e)
+        return JSONResponse({"error": "delete failed"}, status_code=500)
+    logger.info(
+        "KF internal PII delete: open_kfid=%s euid=%s deleted=%s",
+        open_kfid,
+        mask_id(external_userid),
+        len(deleted),
+    )
     return {"deleted": deleted}
 
 

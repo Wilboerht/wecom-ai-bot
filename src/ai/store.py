@@ -340,29 +340,36 @@ def kv_delete(key: str) -> None:
 
 # ---- 隐私授权状态 ----
 _PRIVACY_PREFIX = "privacy:"
+PRIVACY_NOTICE_VERSION = "2026-11-19"
+
+
+def _privacy_key(open_kfid: str, external_userid: str) -> str:
+    return f"{_PRIVACY_PREFIX}{PRIVACY_NOTICE_VERSION}:{open_kfid}:{external_userid}"
+
+
+def _legacy_privacy_key(open_kfid: str, external_userid: str) -> str:
+    return f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}"
 
 
 def privacy_notice_accepted(open_kfid: str, external_userid: str) -> bool:
     """检查用户是否已确认隐私声明"""
     if not _get_redis():
         _warn_memory_mode()
-    key = f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}"
-    return _storage.privacy.accepted(key)
+    return _storage.privacy.accepted(_privacy_key(open_kfid, external_userid))
 
 
 def privacy_notice_accept(open_kfid: str, external_userid: str) -> None:
     """记录用户已确认隐私声明"""
     if not _get_redis():
         _warn_memory_mode()
-    key = f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}"
-    _storage.privacy.accept(key, PRIVACY_TTL)
+    _storage.privacy.accept(_privacy_key(open_kfid, external_userid), PRIVACY_TTL)
 
 
 # ---- PII 导出/删除（个人信息保护法 查阅权/删除权） ----
 # 按 (open_kfid, external_userid) 维度键控的用户数据 key：
 #   sess:{kfid}:{euid}                 会话历史 LIST（SESSION_TTL，默认 30 分钟）
 #   profile:{kfid}:{euid}              用户护肤档案 STRING（90 天，含过敏史/孕期等敏感字段）
-#   privacy:{kfid}:{euid}              隐私告知确认标记 STRING（365 天）
+#   privacy:{version}:{kfid}:{euid}    当前版本隐私告知确认标记 STRING（365 天）
 #   orderflow:{kfid}:{euid}            订单查询流程状态 kv（600s）
 #   kf:transferred:{kfid}:{euid}       转人工跨批次标记 kv（300s）
 #   welcome-fallback:{kfid}:{euid}:*   欢迎语去重 kv（7 天，按报告 scene_param）
@@ -383,6 +390,7 @@ def _user_kv_keys(open_kfid: str, external_userid: str) -> list[str]:
         f"orderflow:{open_kfid}:{external_userid}",
         f"kf:transferred:{open_kfid}:{external_userid}",
         f"welcome-sent:{open_kfid}:{external_userid}",
+        f"kf-user:{open_kfid}:{external_userid}",
     ]
     pattern_prefixes = [
         f"{_WELCOME_FALLBACK_PREFIX}{open_kfid}:{external_userid}:",
@@ -444,7 +452,8 @@ def delete_user_data(open_kfid: str, external_userid: str) -> list[str]:
     keys = [
         f"{SESSION_PREFIX}{user_id}",
         f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}",
-        f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}",
+        _privacy_key(open_kfid, external_userid),
+        _legacy_privacy_key(open_kfid, external_userid),
         f"{_AGENT_PREFIX}{external_userid}",
         f"{RATELIMIT_PREFIX}{external_userid}",
         *_user_kv_keys(open_kfid, external_userid),
@@ -465,8 +474,12 @@ def delete_user_data(open_kfid: str, external_userid: str) -> list[str]:
     _inmem_session_ttl.pop(user_id, None)
     if _inmem_profiles.pop(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}", None) is not None:
         deleted.append(f"{_PROFILE_PREFIX}{open_kfid}:{external_userid}")
-    if _inmem_privacy.pop(f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}", None) is not None:
-        deleted.append(f"{_PRIVACY_PREFIX}{open_kfid}:{external_userid}")
+    for privacy_key in (
+        _privacy_key(open_kfid, external_userid),
+        _legacy_privacy_key(open_kfid, external_userid),
+    ):
+        if _inmem_privacy.pop(privacy_key, None) is not None:
+            deleted.append(privacy_key)
     if _inmem_last_agent.pop(external_userid, None) is not None:
         deleted.append(f"{_AGENT_PREFIX}{external_userid}")
     if _inmem_ratelimit.pop(external_userid, None) is not None:
