@@ -25,7 +25,9 @@ _OUTBOX_MAX = 1000
 _inmem_outbox: list[str] = []
 
 
-def _headers(method: str, path: str, body: bytes) -> dict[str, str] | None:
+def _headers(
+    method: str, path: str, body: bytes, query: str = ""
+) -> dict[str, str] | None:
     key = config.KF_MAIN_INTERNAL_KEY
     secret = config.KF_MAIN_INTERNAL_SECRET
     if not key or not secret:
@@ -34,7 +36,7 @@ def _headers(method: str, path: str, body: bytes) -> dict[str, str] | None:
     timestamp = int(time.time())
     nonce = secrets.token_hex(16)
     body_hash = hashlib.sha256(body).hexdigest()
-    payload = f"{method.upper()}|{path}||{timestamp}|{nonce}|{body_hash}"
+    payload = f"{method.upper()}|{path}|{query}|{timestamp}|{nonce}|{body_hash}"
     signature = hmac.new(
         secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
     ).hexdigest()
@@ -103,6 +105,42 @@ def _post(path: str, payload: dict[str, Any]) -> bool:
             type(exc).__name__,
         )
         return False
+
+
+_LEGAL_CONTENT_HASH_PATH = "/api/internal/legal/content-hash"
+_LEGAL_CONTENT_HASH_QUERY = "document=PRIVACY"
+_LEGAL_CONTENT_HASH_CACHE_MS = 5 * 60 * 1000
+_legal_hash_cache: tuple[str, float] | None = None
+
+
+def get_legal_content_hash() -> str | None:
+    """Read current published privacy content hash. Best effort, never blocks consent."""
+    global _legal_hash_cache
+    now = time.time() * 1000
+    if _legal_hash_cache and _legal_hash_cache[1] > now:
+        return _legal_hash_cache[0]
+
+    headers = _headers(
+        "GET", _LEGAL_CONTENT_HASH_PATH, b"", _LEGAL_CONTENT_HASH_QUERY
+    )
+    if not headers:
+        return None
+    try:
+        response = httpx.get(
+            f"{config.KF_MAIN_API_BASE}{_LEGAL_CONTENT_HASH_PATH}?{_LEGAL_CONTENT_HASH_QUERY}",
+            headers=headers,
+            timeout=_TIMEOUT,
+        )
+        if response.status_code >= 300:
+            return None
+        body = response.json()
+        value = body.get("data", {}).get("contentHash")
+        if isinstance(value, str) and value:
+            _legal_hash_cache = (value, now + _LEGAL_CONTENT_HASH_CACHE_MS)
+            return value
+    except Exception as exc:
+        logger.warning("[KF consent] legal content hash unavailable: %s", type(exc).__name__)
+    return None
 
 
 def _enqueue(path: str, payload: dict[str, Any]) -> None:
@@ -176,6 +214,9 @@ def record_event(open_kfid: str, external_userid: str, action: str, version: str
         "action": action,
         "version": version,
     }
+    content_hash = get_legal_content_hash()
+    if content_hash:
+        payload["contentHash"] = content_hash
     if not _post("/api/internal/kf/consent-event", payload):
         _enqueue("/api/internal/kf/consent-event", payload)
     else:

@@ -37,6 +37,7 @@ def test_record_event_posts_to_main(monkeypatch):
     monkeypatch.setattr(config, "KF_MAIN_INTERNAL_KEY", "kf-key")
     monkeypatch.setattr(config, "KF_MAIN_INTERNAL_SECRET", "s" * 32)
     monkeypatch.setattr(config, "KF_MAIN_API_BASE", "http://main.test")
+    monkeypatch.setattr(kf_consent, "get_legal_content_hash", lambda: "privacy-hash")
     monkeypatch.setattr(
         kf_consent.httpx,
         "post",
@@ -50,6 +51,24 @@ def test_record_event_posts_to_main(monkeypatch):
     assert url == "http://main.test/api/internal/kf/consent-event"
     payload = json.loads(kwargs["content"])
     assert payload["action"] == "GRANTED"
+
+
+def test_record_event_omits_unavailable_content_hash(monkeypatch):
+    calls = []
+    monkeypatch.setattr(config, "KF_MAIN_INTERNAL_KEY", "kf-key")
+    monkeypatch.setattr(config, "KF_MAIN_INTERNAL_SECRET", "s" * 32)
+    monkeypatch.setattr(config, "KF_MAIN_API_BASE", "http://main.test")
+    monkeypatch.setattr(kf_consent, "get_legal_content_hash", lambda: None)
+    monkeypatch.setattr(
+        kf_consent.httpx,
+        "post",
+        lambda url, **kwargs: calls.append((url, kwargs)) or _Response(),
+    )
+
+    kf_consent.record_event("wk1", "wm1", "GRANTED", "2026-11-19")
+
+    payload = json.loads(calls[0][1]["content"])
+    assert "contentHash" not in payload
 
 
 def test_no_key_skips_request(monkeypatch):
@@ -69,6 +88,7 @@ def test_no_key_skips_request(monkeypatch):
 def test_failed_event_is_queued_and_flushed(monkeypatch):
     monkeypatch.setattr(kf_consent.store, "_get_redis", lambda: None)
     monkeypatch.setattr(kf_consent, "_post", lambda path, payload: False)
+    monkeypatch.setattr(kf_consent, "get_legal_content_hash", lambda: None)
     kf_consent._inmem_outbox.clear()
 
     kf_consent.record_event("wk1", "wm1", "GRANTED", "2026-11-19")

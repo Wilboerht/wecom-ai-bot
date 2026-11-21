@@ -5,6 +5,7 @@ Redis 持久化存储 — 会话、去重、限流、转接状态
 Redis 运行期故障时自动降级内存模式，并每 60 秒尝试重连恢复。
 """
 import logging
+import os
 import time
 from ..config import config
 from .storage import FallbackStorage, MemoryStorage
@@ -340,7 +341,7 @@ def kv_delete(key: str) -> None:
 
 # ---- 隐私授权状态 ----
 _PRIVACY_PREFIX = "privacy:"
-PRIVACY_NOTICE_VERSION = "2026-11-19"
+PRIVACY_NOTICE_VERSION = os.getenv("PRIVACY_NOTICE_VERSION", "2026-11-19").strip() or "2026-11-19"
 
 
 def _privacy_key(open_kfid: str, external_userid: str) -> str:
